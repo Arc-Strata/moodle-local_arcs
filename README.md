@@ -25,7 +25,8 @@ Site administration › Plugins › Install plugins, or by copying the files, th
 complete the upgrade from Site administration › Notifications.
 
 Setup for Arcs (service, user, role and token) will be documented here before
-the first release.
+the first release. The web service contract Arcs relies on is in
+[docs/contract.md](docs/contract.md).
 
 ## Licence
 

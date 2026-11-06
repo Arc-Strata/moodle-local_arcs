@@ -22,4 +22,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['arcs:export'] = 'Export site data to Arcs';
 $string['pluginname'] = 'Arcs connector';
+$string['privacy:metadata'] = 'The Arcs connector plugin does not store or export any personal data.';
