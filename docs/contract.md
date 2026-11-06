@@ -113,6 +113,11 @@ Functions that return rows of one kind (the "state functions", such as
    is a hint: some Moodle code paths change data without telling anyone, and
    the state functions are always the truth.
 
+Activity (views, logins, attempts and so on) is not state: it comes from the
+log stream, `local_arcs_get_log_events`, read alongside with its own cursor
+(see that function). The two are independent. When Moodle's standard log store
+is off, only the log stream stops; everything above still works.
+
 ## Versioning
 
 - `contractversion` changes only when something is removed or changes
@@ -146,6 +151,8 @@ Returns an object:
 | `timezone` | string | The site's default timezone (an IANA name, such as `Europe/London`). |
 | `logstoreenabled` | bool | Whether Moodle's standard log store is enabled, so that new events are recorded. |
 | `logstorelifetime` | int | Days the standard log store keeps rows before Moodle deletes them; 0 means forever. |
+| `logstoreoldestid` | int or null | Lowest log event id currently kept, or null when the log is empty. |
+| `logstorenewestid` | int or null | Highest log event id, or null when the log is empty. A reader of `local_arcs_get_log_events` that wants no history starts here. |
 | `changelogoldestid` | int or null | Lowest change id currently kept, or null when the change log is empty. |
 | `changelognewestid` | int or null | Highest change id currently kept, or null when the change log is empty. |
 | `changeloghighwatermark` | int | Highest change id a reader may read up to now (see `local_arcs_get_changes`). A new reader starts here. |
@@ -698,3 +705,88 @@ Each membership:
 Memberships of deleted users are deleted by Moodle.
 
 Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_log_events
+
+Events from Moodle's standard log store (the `logstore_standard_log` table),
+in id order: what each user did, where and when. This is the site's own
+activity log, read as it is; the plugin keeps no copy of it.
+
+Parameters:
+
+| Name | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `after` | int | 0 | Cursor: return events with a higher id. |
+| `limit` | int | 1000 | Most events to return; at most 1000. |
+
+There is no `ids` parameter and no filter; the log is read by cursor only.
+
+Returns an object:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `events` | list | The events with `id > after`, in ascending `id` order, at most `limit`. |
+| `next` | int | The cursor to pass as `after` on the next call: the last `id` returned, or `after` when none are. Always set. |
+| `hasmore` | bool | Whether more events are ready now. When false, wait before calling again. |
+| `maxid` | int | The highest event id when the call started; 0 when the log is empty. |
+
+Each event:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Event id. Ascending, but not contiguous: gaps are normal. |
+| `eventname` | string | The event's class, such as `\core\event\course_viewed` or `\mod_quiz\event\attempt_submitted`. |
+| `component` | string | The component that triggered it, such as `core` or `mod_quiz`. |
+| `action` | string | What happened, such as `viewed`, `created` or `submitted`. |
+| `target` | string | What it happened to, such as `course` or `attempt`. |
+| `objecttable`, `objectid` | string or null, int or null | The Moodle table and id of the record the event is about, when it has one. |
+| `crud` | string | `c`, `r`, `u` or `d`: whether the event created, read, updated or deleted. |
+| `edulevel` | int | 0 other, 1 teaching, 2 participating (Moodle's "educational level"). Participating events are learners' own learning activity. |
+| `contextid`, `contextlevel`, `contextinstanceid` | int | The context the event happened in: its id, level (10 system, 30 user, 40 category, 50 course, 70 module, 80 block) and the id of its instance (for a module, the course module id). |
+| `userid` | int or null | The user who acted. 0 for an event with no logged-in user. Null when the event is anonymous. |
+| `courseid` | int or null | The course, when the event happened in one; 0 or null when not. |
+| `relateduserid` | int or null | The user the event concerns, such as a user graded or enrolled, when it has one. Null when the event is anonymous. |
+| `anonymous` | bool | Whether Moodle marked the event anonymous, such as an anonymous feedback response or anything in an assignment with blind marking. Its users are withheld, because Moodle can put the anonymous person in either `userid` or `relateduserid`. |
+| `timecreated` | int | When the event happened. Not in `id` order: see below. |
+| `origin` | string or null | Where the request came from: `web`, `ws` (web service), `cli` (including scheduled tasks) or `restore`. |
+
+Never returned: the event's `other` data (free-form, varies by event, and can
+hold personal data), the IP address, and the real user behind a "log in as"
+session (`userid` is then the user being logged in as).
+
+**Late events and the overlap.** Moodle writes events to the log in batches,
+so `timecreated` is when the event happened, not when its row was written,
+and events are not in `timecreated` order by `id`. Under load an event can
+also become visible a moment after an event with a higher id. So don't resume
+exactly where you stopped:
+
+1. Remember `maxid` from the first call of each run.
+2. Start each run at the `maxid` you remembered from the run before the
+   previous one. On your second run, when you have only one, use that.
+3. Page with `next` until `hasmore` is false, and skip events whose `id` you
+   already hold.
+
+That re-reads about two runs' worth of events, and catches events whose rows
+appeared late.
+
+**Starting.** To read all the history Moodle keeps, start at `after` = 0. To
+read only from now on, start at site info's `logstorenewestid` (0 when the log
+is empty).
+
+**When the log store is off.** If Moodle's standard log store is disabled
+(site info's `logstoreenabled` is false), the call fails with
+`logstore_disabled`, even if old events remain. It never returns an empty page
+that could be mistaken for "no activity". Moodle records nothing while the
+store is off, and no event says when it was switched off or on, so a reader
+cannot see a gap that opens and closes between two runs. Treat the log stream
+as best effort; the state functions are the truth.
+
+**Expiry.** Moodle deletes events older than `logstorelifetime` days (site
+info), oldest first. If `after` is not 0 and is below the oldest kept event's
+`id` minus 1, events you have not read may be gone, and the call fails with
+`cursor_expired`: start again from 0 or from `logstorenewestid`, accepting the
+gap. Moodle deletes by time, not id, so events at the edge of the window can
+go a little out of order: read the log much more often than the lifetime.
+
+Errors: `logstore_disabled`, `cursor_expired`, `limit_exceeded`,
+`invalidparameter`.

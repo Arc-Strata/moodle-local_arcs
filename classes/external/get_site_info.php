@@ -59,7 +59,7 @@ class get_site_info extends external_api {
 
         $clock = \core\di::get(\core\clock::class);
         $retention = new retention($DB, $clock);
-        $info = new site_info($CFG, new logstore(), new reader($DB, $clock, $retention), $retention, new settings());
+        $info = new site_info($CFG, new logstore($DB), new reader($DB, $clock, $retention), $retention, new settings());
         return $info->export();
     }
 
@@ -80,6 +80,8 @@ class get_site_info extends external_api {
             'timezone' => new external_value(PARAM_TIMEZONE, 'Site default timezone; all timestamps are Unix seconds'),
             'logstoreenabled' => new external_value(PARAM_BOOL, 'Whether the standard log store is enabled'),
             'logstorelifetime' => new external_value(PARAM_INT, 'Days the standard log store keeps rows; 0 means forever'),
+            'logstoreoldestid' => new external_value(PARAM_INT, 'Lowest log id, or null', VALUE_REQUIRED, null, NULL_ALLOWED),
+            'logstorenewestid' => new external_value(PARAM_INT, 'Highest log id, or null', VALUE_REQUIRED, null, NULL_ALLOWED),
             'changelogoldestid' => new external_value(PARAM_INT, 'Lowest change id, or null', VALUE_REQUIRED, null, NULL_ALLOWED),
             'changelognewestid' => new external_value(PARAM_INT, 'Highest change id, or null', VALUE_REQUIRED, null, NULL_ALLOWED),
             'changeloghighwatermark' => new external_value(PARAM_INT, 'Highest change id readers may read up to now'),

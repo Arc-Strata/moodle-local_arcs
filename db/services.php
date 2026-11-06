@@ -105,6 +105,14 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_log_events' => [
+        'classname' => \local_arcs\external\get_log_events::class,
+        'description' => 'Returns events from the standard log store, after a cursor.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_profile_fields' => [
         'classname' => \local_arcs\external\get_profile_fields::class,
         'description' => 'Returns custom profile field definitions, by cursor or by id.',
@@ -152,6 +160,7 @@ $services = [
             'local_arcs_get_courses',
             'local_arcs_get_grade_items',
             'local_arcs_get_grades',
+            'local_arcs_get_log_events',
             'local_arcs_get_profile_fields',
             'local_arcs_get_site_info',
             'local_arcs_get_user_enrolments',

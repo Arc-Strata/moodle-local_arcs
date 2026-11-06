@@ -156,6 +156,38 @@ final class get_site_info_test extends \advanced_testcase {
     }
 
     /**
+     * The lowest and highest ids in the standard log store are reported, and null when it is empty.
+     */
+    public function test_execute_reports_log_store_bounds(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+        set_config('enabled_stores', 'logstore_standard', 'tool_log');
+        set_config('buffersize', 0, 'logstore_standard');
+        get_log_manager(true);
+        $user = $this->set_exporter();
+        $DB->delete_records('logstore_standard_log');
+
+        $result = $this->call();
+        $this->assertNull($result['logstoreoldestid']);
+        $this->assertNull($result['logstorenewestid']);
+
+        $context = \core\context\user::instance($user->id);
+        for ($i = 0; $i < 2; $i++) {
+            \core\event\user_profile_viewed::create([
+                'objectid' => $user->id,
+                'relateduserid' => $user->id,
+                'context' => $context,
+            ])->trigger();
+        }
+        $ids = array_map('intval', $DB->get_fieldset_sql('SELECT id FROM {logstore_standard_log} ORDER BY id'));
+
+        $result = $this->call();
+        $this->assertSame($ids[0], $result['logstoreoldestid']);
+        $this->assertSame(end($ids), $result['logstorenewestid']);
+    }
+
+    /**
      * A user without local/arcs:export is refused.
      */
     public function test_execute_requires_capability(): void {

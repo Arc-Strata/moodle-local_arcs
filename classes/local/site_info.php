@@ -59,6 +59,7 @@ class site_info {
     public function export(): array {
         $plugin = \core\plugin_manager::instance()->get_plugin_info('local_arcs');
         $bounds = $this->changes->bounds();
+        $logbounds = $this->logstore->bounds();
 
         return [
             'contractversion' => contract::VERSION,
@@ -71,6 +72,8 @@ class site_info {
             'timezone' => \core_date::get_server_timezone(),
             'logstoreenabled' => $this->logstore->is_enabled(),
             'logstorelifetime' => $this->logstore->lifetime_days(),
+            'logstoreoldestid' => $logbounds['oldest'],
+            'logstorenewestid' => $logbounds['newest'],
             'changelogoldestid' => $bounds['oldest'],
             'changelognewestid' => $bounds['newest'],
             'changeloghighwatermark' => $this->changes->high_water_mark(),

@@ -83,6 +83,7 @@ class provider implements
         'activitycompletions',
         'grades',
         'cohortmembers',
+        'logevents',
     ];
 
     /**

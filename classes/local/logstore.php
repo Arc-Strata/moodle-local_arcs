@@ -17,7 +17,7 @@
 namespace local_arcs\local;
 
 /**
- * Reads the state of Moodle's standard log store (logstore_standard).
+ * Reads the state of Moodle's standard log store (logstore_standard) and the bounds of its table.
  *
  * @package    local_arcs
  * @copyright  2026 David Ells
@@ -26,6 +26,20 @@ namespace local_arcs\local;
 class logstore {
     /** @var string Component name of the standard log store. */
     private const COMPONENT = 'logstore_standard';
+
+    /** @var string The standard log store's table. */
+    public const TABLE = 'logstore_standard_log';
+
+    /**
+     * Constructor.
+     *
+     * @param \moodle_database $db The database.
+     */
+    public function __construct(
+        /** @var \moodle_database The database. */
+        private \moodle_database $db,
+    ) {
+    }
 
     /**
      * Whether the standard log store is enabled, so that new events are written to it.
@@ -44,5 +58,18 @@ class logstore {
      */
     public function lifetime_days(): int {
         return (int) get_config(self::COMPONENT, 'loglifetime');
+    }
+
+    /**
+     * The lowest and highest ids currently in the standard log store's table.
+     *
+     * @return array With 'oldest' and 'newest', each null when the table is empty.
+     */
+    public function bounds(): array {
+        $row = $this->db->get_record_sql('SELECT MIN(id) AS oldest, MAX(id) AS newest FROM {' . self::TABLE . '}');
+        return [
+            'oldest' => $row->oldest === null ? null : (int) $row->oldest,
+            'newest' => $row->newest === null ? null : (int) $row->newest,
+        ];
     }
 }

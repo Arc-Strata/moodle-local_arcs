@@ -23,8 +23,9 @@
  */
 
 $string['arcs:export'] = 'Export site data to Arcs';
-$string['cursor_expired'] = 'The cursor is older than the change log keeps. Read every entity again, then follow changes from the current high-water mark.';
+$string['cursor_expired'] = 'The cursor is older than the oldest row kept, so rows after it have been deleted. See the web service contract for how to start again.';
 $string['limit_exceeded'] = 'The limit, or the number of ids, is above the maximum of {$a}.';
+$string['logstore_disabled'] = 'The standard log store is not enabled, so log events are not being recorded.';
 $string['optionalfields'] = 'Optional user fields to export';
 $string['optionalfields_custom'] = '{$a} (custom profile field)';
 $string['optionalfields_desc'] = 'The user fields Arcs may read besides those it always receives (identifiers, names, email, authentication method, timezone, language, account status and access times). Fields that are not selected are never sent. New custom profile fields are not sent until they are selected. Custom profile fields are selected by shortname, so a field whose shortname changes stops being sent until it is selected again.';
@@ -54,6 +55,7 @@ $string['privacy:metadata:arcs:lastaccess'] = 'When the user last accessed the s
 $string['privacy:metadata:arcs:lastlogin'] = 'When the user last logged in before their current login.';
 $string['privacy:metadata:arcs:lastname'] = 'The user\'s last name.';
 $string['privacy:metadata:arcs:lastnamephonetic'] = 'The phonetic spelling of the user\'s last name (optional).';
+$string['privacy:metadata:arcs:logevents'] = 'The events recorded about the user in the site\'s standard log: what happened, to which record, in which context and course, which other user it concerned, and when. The event\'s other details, the IP address and the real user behind a "log in as" session are not sent. For an event that is anonymous, neither the user who acted nor the user it concerned is sent.';
 $string['privacy:metadata:arcs:middlename'] = 'The user\'s middle name (optional).';
 $string['privacy:metadata:arcs:phone1'] = 'The user\'s phone number (optional).';
 $string['privacy:metadata:arcs:phone2'] = 'The user\'s mobile phone number (optional).';
