@@ -17,11 +17,14 @@
 namespace local_arcs\privacy;
 
 use core_privacy\local\metadata\collection;
+use core_privacy\local\metadata\types\database_table;
+use core_privacy\local\metadata\types\external_location;
 use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
 use core_privacy\manager;
+use local_arcs\external\get_users;
 use local_arcs\local\changelog\entity;
 use local_arcs\local\changelog\operation;
 use local_arcs\local\changelog\recorder;
@@ -52,6 +55,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->resetAfterTest();
         $this->user = $this->getDataGenerator()->create_user();
         $this->other = $this->getDataGenerator()->create_user();
+        // Creating users records changes on databases where PHPUnit does not wrap the test in a transaction.
+        $DB->delete_records(recorder::TABLE);
         $recorder = new recorder($DB, $this->mock_clock_with_frozen(1700000000));
         $recorder->record(entity::USER, $this->user->id, operation::UPSERT, $this->user->id);
         $recorder->record(entity::GRADE, 77, operation::DELETE, $this->user->id, 5);
@@ -78,18 +83,36 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * The change log table and each of its fields are described with defined strings.
+     * The change log table and the Arcs external location are described, each field with a defined string.
      */
     public function test_get_metadata(): void {
         $items = provider::get_metadata(new collection('local_arcs'))->get_collection();
 
-        $this->assertCount(1, $items);
+        $this->assertCount(2, $items);
+        $this->assertInstanceOf(database_table::class, $items[0]);
         $this->assertSame('local_arcs_change', $items[0]->get_name());
         $fields = ['entity', 'entityid', 'op', 'userid', 'courseid', 'timecreated'];
         $this->assertSame($fields, array_keys($items[0]->get_privacy_fields()));
-        foreach ($items[0]->get_privacy_fields() + ['summary' => $items[0]->get_summary()] as $key) {
-            $this->assertTrue(get_string_manager()->string_exists($key, 'local_arcs'), $key);
+        $this->assertInstanceOf(external_location::class, $items[1]);
+        $this->assertSame('arcs', $items[1]->get_name());
+        foreach ($items as $item) {
+            foreach ($item->get_privacy_fields() + ['summary' => $item->get_summary()] as $key) {
+                $this->assertTrue(get_string_manager()->string_exists($key, 'local_arcs'), $key);
+            }
         }
+    }
+
+    /**
+     * The external location names every user field local_arcs_get_users can send.
+     */
+    public function test_get_metadata_lists_exported_user_fields(): void {
+        $items = provider::get_metadata(new collection('local_arcs'))->get_collection();
+        $exported = array_keys(get_users::execute_returns()->keys['users']->content->keys);
+
+        $this->assertEqualsCanonicalizing(
+            array_values(array_diff($exported, ['id'])),
+            array_keys($items[1]->get_privacy_fields())
+        );
     }
 
     /**
@@ -99,8 +122,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $contexts = provider::get_contexts_for_userid($this->user->id)->get_contextids();
         $this->assertEquals([\core\context\user::instance($this->user->id)->id], $contexts);
 
-        $stranger = $this->getDataGenerator()->create_user();
-        $this->assertSame([], provider::get_contexts_for_userid($stranger->id)->get_contextids());
+        // The admin was created at install, before anything recorded changes.
+        $this->assertSame([], provider::get_contexts_for_userid(get_admin()->id)->get_contextids());
     }
 
     /**

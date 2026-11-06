@@ -16,6 +16,8 @@
 
 namespace local_arcs\tests;
 
+use local_arcs\local\changelog\recorder;
+
 /**
  * Test helper: acts as the user Arcs connects as.
  *
@@ -28,9 +30,14 @@ trait exporter_trait {
     /**
      * Creates a user holding local/arcs:export at system level and makes them the current user.
      *
+     * Creating the user records a change; the change log is emptied afterwards, so that
+     * tests start from an empty log on every database. (On PostgreSQL, PHPUnit runs each
+     * test in a transaction, so the change would never be recorded; elsewhere it would.)
+     *
      * @return \stdClass The user.
      */
     protected function set_exporter(): \stdClass {
+        global $DB;
         $generator = $this->getDataGenerator();
         $user = $generator->create_user();
         $roleid = $generator->create_role();
@@ -38,6 +45,7 @@ trait exporter_trait {
         assign_capability('local/arcs:export', CAP_ALLOW, $roleid, $systemcontext->id);
         role_assign($roleid, $user->id, $systemcontext->id);
         $this->setUser($user);
+        $DB->delete_records(recorder::TABLE);
         return $user;
     }
 }

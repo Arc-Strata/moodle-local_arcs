@@ -73,6 +73,21 @@ final class get_site_info_test extends \advanced_testcase {
         $this->assertSame(0, $result['changeloghighwatermark']);
         $this->assertSame(0, $result['changelogpurgedupto']);
         $this->assertSame(30, $result['changelogretentiondays']);
+        $this->assertSame(['department', 'institution', 'city', 'country'], $result['optionalfields']);
+    }
+
+    /**
+     * The optional user fields an admin has selected are reported, including none.
+     */
+    public function test_execute_reports_optional_fields(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+
+        set_config('optionalfields', 'phone1,profile_field_team', 'local_arcs');
+        $this->assertSame(['phone1', 'profile_field_team'], $this->call()['optionalfields']);
+
+        set_config('optionalfields', '', 'local_arcs');
+        $this->assertSame([], $this->call()['optionalfields']);
     }
 
     /**

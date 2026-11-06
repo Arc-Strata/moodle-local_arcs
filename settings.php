@@ -42,5 +42,30 @@ if ($hassiteconfig) {
             settings::DEFAULT_RETENTION_DAYS,
             $choices
         ));
+
+        $settings->add(new admin_setting_configmultiselect(
+            'local_arcs/optionalfields',
+            new \core\lang_string('optionalfields', 'local_arcs'),
+            new \core\lang_string('optionalfields_desc', 'local_arcs'),
+            settings::DEFAULT_OPTIONAL_FIELDS,
+            function (): array {
+                global $CFG;
+                require_once($CFG->dirroot . '/user/profile/lib.php');
+
+                $choices = [];
+                foreach (settings::OPTIONAL_USER_FIELDS as $field) {
+                    $choices[$field] = new \core\lang_string($field);
+                }
+                $context = \core\context\system::instance();
+                foreach (profile_get_custom_fields() as $field) {
+                    $choices[\core_user\fields::PROFILE_FIELD_PREFIX . $field->shortname] = new \core\lang_string(
+                        'optionalfields_custom',
+                        'local_arcs',
+                        format_string($field->name, true, ['context' => $context, 'escape' => false])
+                    );
+                }
+                return $choices;
+            }
+        ));
     }
 }

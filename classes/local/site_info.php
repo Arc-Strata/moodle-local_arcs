@@ -76,6 +76,7 @@ class site_info {
             'changeloghighwatermark' => $this->changes->high_water_mark(),
             'changelogpurgedupto' => $this->retention->purged_up_to(),
             'changelogretentiondays' => $this->settings->retention_days(),
+            'optionalfields' => $this->settings->optional_fields(),
         ];
     }
 }

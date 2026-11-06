@@ -30,6 +30,9 @@ use core_privacy\local\request\writer;
  * The change log (local_arcs_change) holds ids and times only. Its rows that name a
  * user are attached to that user's context.
  *
+ * The web service functions send user data to Arcs, an external system, so it is
+ * declared as an external location. The plugin keeps no copy of what it sends.
+ *
  * Rows written by delete_user() after a privacy deletion (the user's own deletion and the
  * removal of their enrolments and grades) are kept on purpose, until the retention period
  * ends: they are how Arcs learns to delete its copy of the person.
@@ -44,6 +47,38 @@ class provider implements
     \core_privacy\local\request\plugin\provider {
     /** @var string The change log table. */
     private const TABLE = 'local_arcs_change';
+
+    /** @var string[] User fields the web service functions can send to Arcs, optional ones included. */
+    private const EXPORTED_USER_FIELDS = [
+        'username',
+        'idnumber',
+        'email',
+        'auth',
+        'firstname',
+        'lastname',
+        'timezone',
+        'lang',
+        'department',
+        'institution',
+        'city',
+        'country',
+        'phone1',
+        'phone2',
+        'address',
+        'middlename',
+        'alternatename',
+        'firstnamephonetic',
+        'lastnamephonetic',
+        'suspended',
+        'deleted',
+        'confirmed',
+        'firstaccess',
+        'lastaccess',
+        'lastlogin',
+        'timecreated',
+        'timemodified',
+        'profilefields',
+    ];
 
     /**
      * Describes the personal data the plugin stores.
@@ -60,6 +95,12 @@ class provider implements
             'courseid' => 'privacy:metadata:local_arcs_change:courseid',
             'timecreated' => 'privacy:metadata:local_arcs_change:timecreated',
         ], 'privacy:metadata:local_arcs_change');
+
+        $fields = [];
+        foreach (self::EXPORTED_USER_FIELDS as $field) {
+            $fields[$field] = 'privacy:metadata:arcs:' . $field;
+        }
+        $collection->add_external_location_link('arcs', $fields, 'privacy:metadata:arcs');
 
         return $collection;
     }

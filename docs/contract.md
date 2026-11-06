@@ -57,18 +57,20 @@ These apply to every function unless its section says otherwise.
 
 ### Paging (state functions)
 
-Functions that return rows of one kind (the "state functions", added in later
-releases) share one shape:
+Functions that return rows of one kind (the "state functions", such as
+`local_arcs_get_users`) share one shape:
 
-- Parameters: `after` (integer, default 0), `limit` (integer, default and
-  maximum set by the plugin and stated in each function's section), and
-  optionally `ids` (list of integers).
+- Parameters: `after` (integer, default 0), `limit` (integer, default 1000,
+  at most 1000), and optionally `ids` (list of integers, default empty).
+- Returns an object with the rows, in a list named after the function (`users`,
+  `profilefields`, ...), and `next`.
 - Without `ids`, rows with `id > after` are returned in ascending `id` order, at
-  most `limit` of them. `next` is the last `id` returned, or null when there are
-  no more rows. Pass `next` as `after` to read the following page.
+  most `limit` of them. `next` is the last `id` returned, or null when no rows
+  are left after this page. Pass `next` as `after` to read the following page.
 - With `ids`, exactly those rows that still exist are returned, in ascending
-  `id` order, and `after` is ignored. At most `limit` ids may be given. This is
-  how a reader follows the change log to fetch current state.
+  `id` order, `after` is ignored and `next` is null. Repeated ids count once,
+  and at most `limit` ids may be given. This is how a reader follows the change
+  log to fetch current state. An empty `ids` list means "no filter".
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
   `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
@@ -124,6 +126,7 @@ Returns an object:
 | `changeloghighwatermark` | int | Highest change id a reader may read up to now (see `local_arcs_get_changes`). A new reader starts here. |
 | `changelogpurgedupto` | int | Every change up to this id has been deleted for age; a cursor below it is expired. 0 when nothing has been deleted. |
 | `changelogretentiondays` | int | Days the change log keeps rows. Read changes more often than this. |
+| `optionalfields` | list of strings | The optional user fields this site exports (see `local_arcs_get_users`): user field names, such as `department`, and `profile_field_` followed by a custom profile field's shortname. Optional fields not listed are withheld. |
 
 Errors: none beyond the access errors above.
 
@@ -194,7 +197,112 @@ Entities:
 | `grade_item` | `grade_items.id` | |
 | `grade` | `grade_grades.id` | |
 
-Which Moodle events record which changes, and which deletes imply which, is
-listed per entity as each state function is added.
+Which Moodle events record which changes:
+
+| Moodle event | Change |
+| --- | --- |
+| `\core\event\user_created`, `user_updated` | `user` `upsert`, `userid` = the user. Saving a user's custom profile field values is followed by `user_updated`. |
+| `\core\event\user_deleted` | `user` `delete`, `userid` = the user. |
+| `\core\event\user_info_field_created`, `user_info_field_updated` | `profile_field` `upsert`. |
+| `\core\event\user_info_field_deleted` | `profile_field` `delete`. |
+
+Changes are recorded only after the Moodle transaction that made them commits,
+so a change that is rolled back is never listed.
+
+Deletes that imply others (Moodle removes or scrubs the dependent rows without
+a change of their own):
+
+- A **`user` delete** means the user is deleted: Moodle keeps a scrubbed user
+  row with `deleted` true (see `local_arcs_get_users`). Treat the user's
+  enrolments, completions, grades and cohort memberships as gone, and erase
+  the person downstream.
+- A **`profile_field` delete** means every user's value for that field is gone.
 
 Errors: `limit_exceeded`, `invalidparameter`, `cursor_expired`.
+
+### local_arcs_get_users
+
+Users, from Moodle's `user` table, with their custom profile field values.
+A state function (see "Paging"): returns `users` and `next`.
+
+Parameters: `after`, `limit`, `ids` (user ids), as in "Paging".
+
+Every user is returned, including the guest user, administrators, suspended
+users and deleted users. Passwords, secrets, IP addresses and session data are
+never returned.
+
+Each user:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | User id: the stable key. |
+| `username` | string | Username. Unique per site (with `mnethostid`, not exported). |
+| `idnumber` | string | ID number, often an HR or student number; empty if not set. |
+| `email` | string | Email address. |
+| `auth` | string | Authentication method, such as `manual`, `ldap` or `oauth2`. |
+| `firstname`, `lastname` | string | Names. |
+| `timezone` | string | Timezone name, or `99` for the site default. |
+| `lang` | string | Preferred language code; may be empty. |
+| optional fields | string | See below. Present only when the site exports them. |
+| `suspended` | bool | Whether the account is suspended. |
+| `deleted` | bool | Whether the user is deleted. |
+| `confirmed` | bool | Whether the account is confirmed. |
+| `firstaccess`, `lastaccess` | int | First and last access to the site; 0 if never. |
+| `lastlogin` | int | The login before the current one; 0 if none. |
+| `timecreated`, `timemodified` | int | When the user was created and last changed. |
+| `profilefields` | list | The user's values for the exported custom profile fields. |
+
+**Optional fields.** A site administrator chooses which of these are exported
+(plugin setting "Optional user fields to export"); `optionalfields` in site info
+lists the choice. A field that is not chosen is absent from every user, never
+returned empty.
+
+| Field | Exported by default |
+| --- | --- |
+| `department`, `institution`, `city`, `country` | yes |
+| `phone1`, `phone2`, `address`, `middlename`, `alternatename`, `firstnamephonetic`, `lastnamephonetic` | no |
+| custom profile fields (`profile_field_<shortname>`) | no |
+
+`country` is a two-letter ISO 3166 code, or empty.
+
+Each `profilefields` entry:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `fieldid` | int | The profile field's id (see `local_arcs_get_profile_fields`). |
+| `shortname` | string | The profile field's shortname when the user was read. |
+| `value` | string | The value as Moodle stores it: menu fields hold the chosen option's text, checkboxes `0` or `1`, dates a Unix timestamp. |
+
+A user with no stored value for a field has no entry for it. Exported fields
+are chosen by shortname, so a field whose shortname changes stops being
+exported until the administrator chooses it again.
+
+**Deleted users.** When Moodle deletes a user it keeps the row with `deleted`
+true: the username is replaced (with the old email address and a timestamp),
+the email with a hash of the old username, and the ID number is cleared. Other
+fields, names included, are left as they were. Profile field values are
+deleted. The change log records a `user` `delete`.
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_profile_fields
+
+Custom profile field definitions, from Moodle's `user_info_field` table, so
+that values can be labelled. Every definition is returned, whether or not its
+values are exported. A state function (see "Paging"): returns `profilefields`
+and `next`.
+
+Parameters: `after`, `limit`, `ids` (profile field ids), as in "Paging".
+
+Each profile field:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Profile field id. |
+| `shortname` | string | Shortname, unique on the site. |
+| `name` | string | Name, raw. |
+| `datatype` | string | Field type: `text`, `textarea`, `menu`, `checkbox`, `datetime`, `social`, or a third-party type. |
+| `categoryid` | int | The profile field category it is shown under. |
+| `visible` | int | Who can see it in Moodle: 0 nobody, 1 the user, 2 everyone, 3 the user and their teachers. It does not affect the export. |
+
+Errors: `limit_exceeded`, `invalidparameter`.

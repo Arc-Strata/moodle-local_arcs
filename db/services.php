@@ -33,9 +33,25 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_profile_fields' => [
+        'classname' => \local_arcs\external\get_profile_fields::class,
+        'description' => 'Returns custom profile field definitions, by cursor or by id.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_site_info' => [
         'classname' => \local_arcs\external\get_site_info::class,
         'description' => 'Returns the contract version, plugin and Moodle versions, site identity and log store state.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
+    'local_arcs_get_users' => [
+        'classname' => \local_arcs\external\get_users::class,
+        'description' => 'Returns users, with the optional fields an admin has chosen to export, by cursor or by id.',
         'type' => 'read',
         'capabilities' => 'local/arcs:export',
         'ajax' => false,
@@ -47,7 +63,9 @@ $services = [
     'Arcs connector' => [
         'functions' => [
             'local_arcs_get_changes',
+            'local_arcs_get_profile_fields',
             'local_arcs_get_site_info',
+            'local_arcs_get_users',
         ],
         'shortname' => 'local_arcs',
         'requiredcapability' => 'local/arcs:export',

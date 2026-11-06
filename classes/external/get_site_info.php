@@ -18,6 +18,7 @@ namespace local_arcs\external;
 
 use core_external\external_api;
 use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_arcs\local\changelog\reader;
@@ -84,6 +85,10 @@ class get_site_info extends external_api {
             'changeloghighwatermark' => new external_value(PARAM_INT, 'Highest change id readers may read up to now'),
             'changelogpurgedupto' => new external_value(PARAM_INT, 'Highest change id deleted for age; lower cursors are expired'),
             'changelogretentiondays' => new external_value(PARAM_INT, 'Days the change log keeps rows'),
+            'optionalfields' => new external_multiple_structure(
+                new external_value(PARAM_RAW, 'A user field column, or profile_field_ and a custom profile field shortname'),
+                'Optional user fields the site exports; any optional field not listed is withheld'
+            ),
         ]);
     }
 }
