@@ -81,6 +81,7 @@ class provider implements
         'userenrolments',
         'coursecompletions',
         'activitycompletions',
+        'grades',
     ];
 
     /**

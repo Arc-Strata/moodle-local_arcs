@@ -45,6 +45,7 @@ $string['privacy:metadata:arcs:email'] = 'The user\'s email address.';
 $string['privacy:metadata:arcs:firstaccess'] = 'When the user first accessed the site.';
 $string['privacy:metadata:arcs:firstname'] = 'The user\'s first name.';
 $string['privacy:metadata:arcs:firstnamephonetic'] = 'The phonetic spelling of the user\'s first name (optional).';
+$string['privacy:metadata:arcs:grades'] = 'The user\'s grades: each grade item\'s final and raw grade, whether the grade is hidden or overridden, and when the user was graded. Feedback is not sent.';
 $string['privacy:metadata:arcs:idnumber'] = 'The user\'s ID number.';
 $string['privacy:metadata:arcs:institution'] = 'The user\'s institution (optional).';
 $string['privacy:metadata:arcs:lang'] = 'The user\'s preferred language.';

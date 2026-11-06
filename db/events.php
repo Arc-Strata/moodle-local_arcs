@@ -162,4 +162,29 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'activity_completion_updated'],
         'internal' => false,
     ],
+    [
+        'eventname' => \core\event\grade_item_created::class,
+        'callback' => [\local_arcs\observer::class, 'grade_item_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\grade_item_updated::class,
+        'callback' => [\local_arcs\observer::class, 'grade_item_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\grade_item_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'grade_item_deleted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\user_graded::class,
+        'callback' => [\local_arcs\observer::class, 'grade_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\grade_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'grade_deleted'],
+        'internal' => false,
+    ],
 ];

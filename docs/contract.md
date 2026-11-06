@@ -76,8 +76,8 @@ Functions that return rows of one kind (the "state functions", such as
   Moodle's `invalidparameter`.
 - Some state functions also take one **filter**, a list of ids that narrows the
   rows paged by `after` and `limit`: `courseids` (rows in those courses),
-  `categoryids` (rows in those categories or below them) or `coursemoduleids`
-  (rows for those course modules). A function that takes two filters accepts
+  `categoryids` (rows in those categories or below them), `coursemoduleids`
+  (rows for those course modules) or `itemids` (rows for those grade items). A function that takes two filters accepts
   only one of them per call. Paging works the
   same with a filter. A filter and `ids` together are refused with
   `invalidparameter`; more than 1000 filter ids are refused with
@@ -99,7 +99,9 @@ Functions that return rows of one kind (the "state functions", such as
      `local_arcs_get_categories` and `local_arcs_get_courses` with
      `categoryids` = [K];
    - a `course_module` `upsert` for module M: page
-     `local_arcs_get_activity_completions` with `coursemoduleids` = [M].
+     `local_arcs_get_activity_completions` with `coursemoduleids` = [M];
+   - a `grade_item` `upsert` for grade item G: page `local_arcs_get_grades`
+     with `itemids` = [G].
 4. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
 5. Also repeat step 2 from time to time (a full reconciliation). The change log
    is a hint: some Moodle code paths change data without telling anyone, and
@@ -236,9 +238,17 @@ Which Moodle events record which changes:
 | `\core\event\role_assigned`, `role_unassigned`, in a course | `user_enrolment` `upsert` for each of the user's enrolments in that course (they carry the user's roles). Nothing for roles in other contexts. |
 | `\core\event\course_completed` | `course_completion` `upsert`, with `userid` and `courseid`. |
 | `\core\event\course_module_completion_updated` | `activity_completion` `upsert`, with `userid` and `courseid`. Viewing an activity is recorded this way when viewing counts towards its completion. |
+| `\core\event\grade_item_created`, `grade_item_updated` | `grade_item` `upsert`, `courseid` = its course. Renaming, hiding, locking, moving and changing an item's grading settings are updates. |
+| `\core\event\grade_item_deleted` | `grade_item` `delete`. |
+| `\core\event\user_graded` | `grade` `upsert`, with `userid` and `courseid`. Recorded when a user's final grade is set or changes: grading in an activity, overriding in the gradebook, importing, and recalculation. |
+| `\core\event\grade_deleted` | `grade` `delete`, with `userid` and `courseid`. |
 
-Changes to the site course's modules (front page activities) are not
-recorded, since they are not exported.
+Changes to the site course's modules (front page activities), and to their
+grade items and grades, are not recorded, since they are not exported.
+
+**Volume.** When the gradebook recalculates a course (after an item's
+grading settings change, for example), each grade whose final grade changes
+is recorded, so one action in a large course can record many `grade` rows.
 
 Changes are recorded only after the Moodle transaction that made them commits,
 so a change that is rolled back is never listed.
@@ -256,7 +266,9 @@ a change of their own):
 - A **`course` delete** means everything in the course is gone: its modules,
   user enrolments, course and activity completions, grade items and grades.
 - A **`course_module` delete** means its activity completions and grade items
-  are gone.
+  are gone. Each grade item's own `grade_item` `delete` is recorded too.
+- A **`grade_item` delete** means its grades are gone. Moodle records a `grade`
+  `delete` for each only in some configurations, so don't rely on them.
 - Deleting an enrolment method unenrols each user through it first, so each
   enrolment has its own `user_enrolment` `delete`.
 
@@ -272,6 +284,8 @@ without changes of their own; see "Keeping in sync", step 3):
   changes an activity's completion settings after users have completion data,
   Moodle deletes that data and recalculates it, recording only the users who
   end up with a new state.
+- A **`grade_item` upsert**: its grades. Hiding, showing, locking and
+  unlocking an item also set the `hidden` and locked state of its grades.
 
 **Changes Moodle makes without any event**, which only a full reconciliation
 finds:
@@ -288,6 +302,12 @@ finds:
   it. Key roles by `roleid`.
 - The LDAP enrolment method suspends and reactivates enrolments (`status`)
   directly.
+- A grade is recorded only when its `finalgrade` changes. Changing only a
+  grade's `hidden` or `overridden` flag, its feedback, or its `rawgrade` while
+  it is overridden or locked, records nothing.
+- While a grade item has `needsupdate` set, Moodle has yet to recalculate its
+  grades (on Moodle 5.3 and later, a course reset recalculates in the
+  background). The recalculation records the grades it changes when it runs.
 
 Errors: `limit_exceeded`, `invalidparameter`, `cursor_expired`.
 
@@ -441,7 +461,7 @@ Each course module:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `id` | int | Course module id. Other records (completions, grade items) refer to modules by this id. |
+| `id` | int | Course module id. Activity completions refer to modules by this id; grade items name their module by `modname` and `instance`, and also carry this id as `coursemoduleid`. |
 | `course` | int | Course id. |
 | `modname` | string | Module type, such as `quiz`, `scorm`, `assign` or `page`. Includes types that are not learning activities, such as `label`, `subsection` (Moodle 4.5+) and `qbank` (question banks, Moodle 5.0+). |
 | `instance` | int | The instance's id in the module type's own table. |
@@ -542,5 +562,67 @@ Each activity completion:
 
 A row exists once a user has some completion state for the activity; no row
 means no completion data. Rows of deleted users stay.
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_grade_items
+
+Grade items, from Moodle's `grade_items` table: every column of each course's
+gradebook, including the course total. Items in the site course are never
+returned. A state function (see "Paging"): returns `gradeitems` and `next`.
+
+Parameters: `after`, `limit`, `ids` (grade item ids), as in "Paging", and the
+filter `courseids`.
+
+Each grade item:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Grade item id. |
+| `courseid` | int | Course id. |
+| `itemtype` | string | `course` (the course total), `category` (a grade category's total), `mod` (an activity's grade) or `manual` (added in the gradebook). |
+| `itemmodule` | string or null | For a `mod` item, the module type, such as `assign`; null otherwise. |
+| `iteminstance` | int or null | For a `mod` item, the module instance id; for a `course` or `category` item, the grade category id; null for `manual` items. |
+| `itemnumber` | int or null | Which of an activity's grade items this is (usually 0; some activities have several). |
+| `coursemoduleid` | int or null | For a `mod` item, its course module id (see `local_arcs_get_course_modules`); null for other items, and when the module no longer exists. |
+| `itemname` | string or null | Item name, raw. Null for the course total. |
+| `idnumber` | string or null | ID number; may be null or empty. |
+| `gradetype` | int | 0 none, 1 value, 2 scale, 3 text (feedback only). |
+| `grademin`, `grademax` | float | The lowest and highest grade. For a scale item, 1 and the number of scale items. |
+| `gradepass` | float | The grade needed to pass; 0 if none is set. |
+| `scaleid` | int or null | For a scale item, the scale id; null otherwise. |
+| `scaleitems` | list of strings | For a scale item, the scale's items, raw, lowest first: grade 1 is the first item. Empty otherwise. Moodle does not let a scale's items change once grades use it. |
+| `hidden` | int | 0 visible, 1 hidden, or a timestamp until which the item is hidden. |
+| `needsupdate` | bool | Whether Moodle has still to recalculate the item's grades. Until it does, its grades may be out of date. |
+| `timemodified` | int or null | When the item was last changed. |
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_grades
+
+Users' grades, from Moodle's `grade_grades` table: one row per user and grade
+item that has a grade or a placeholder for one. Grades in the site course are
+never returned. Feedback is never returned. A state function (see "Paging"):
+returns `grades` and `next`.
+
+Parameters: `after`, `limit`, `ids` (grade ids), as in "Paging", and one of two
+filters: `courseids` or `itemids` (grade item ids).
+
+Each grade:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Grade id. |
+| `itemid` | int | Grade item id (see `local_arcs_get_grade_items`). |
+| `userid` | int | User id. |
+| `finalgrade` | float or null | The grade the gradebook shows, between the item's `grademin` and `grademax`. Null if the user has no grade. For a scale item, the position of the scale item, from 1. |
+| `rawgrade` | float or null | The grade the activity sent, on its own range (`rawgrademin` to `rawgrademax`); null if it sent none, as for `manual` items. Use `finalgrade`. |
+| `rawgrademin`, `rawgrademax` | float | The range of `rawgrade`. |
+| `hidden` | int | 0 visible, 1 hidden, or a timestamp until which the grade is hidden. A grade is also hidden from the user when its item is. |
+| `overridden` | int | When the grade was overridden in the gradebook; 0 if not. An overridden grade no longer follows the activity. |
+| `timemodified` | int or null | When the user was graded; null if not graded yet. |
+
+Pass or fail is `finalgrade >= gradepass` where the item has a `gradepass`
+above 0. Grades of deleted users are deleted by Moodle.
 
 Errors: `limit_exceeded`, `invalidparameter`.

@@ -226,6 +226,58 @@ class observer {
     }
 
     /**
+     * A grade item was created or updated. Site course grade items are not exported, so they are ignored.
+     *
+     * Hiding or locking an item also changes its grades without events of their own; readers
+     * refetch them with the itemids filter.
+     *
+     * @param \core\event\base $event grade_item_created or grade_item_updated.
+     */
+    public static function grade_item_upserted(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::GRADE_ITEM, $event->objectid, operation::UPSERT, null, $event->courseid);
+    }
+
+    /**
+     * A grade item was deleted, and its grades with it. Site course grade items are not exported, so they are ignored.
+     *
+     * @param \core\event\grade_item_deleted $event The event.
+     */
+    public static function grade_item_deleted(\core\event\grade_item_deleted $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::GRADE_ITEM, $event->objectid, operation::DELETE, null, $event->courseid);
+    }
+
+    /**
+     * A user's final grade was set or changed, by grading, overriding or recalculation.
+     * Site course grades are not exported, so they are ignored.
+     *
+     * @param \core\event\user_graded $event The event.
+     */
+    public static function grade_upserted(\core\event\user_graded $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::GRADE, $event->objectid, operation::UPSERT, $event->relateduserid, $event->courseid);
+    }
+
+    /**
+     * A user's grade was deleted. Site course grades are not exported, so they are ignored.
+     *
+     * @param \core\event\grade_deleted $event The event.
+     */
+    public static function grade_deleted(\core\event\grade_deleted $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::GRADE, $event->objectid, operation::DELETE, $event->relateduserid, $event->courseid);
+    }
+
+    /**
      * The recorder that writes change rows.
      *
      * @return recorder

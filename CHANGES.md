@@ -20,3 +20,6 @@ contract version and are listed here.
   `local_arcs_get_course_completions` and `local_arcs_get_activity_completions` (with a
   `coursemoduleids` filter), and change log entries for enrolments, role changes and
   completions.
+- Web service functions `local_arcs_get_grade_items` (with course modules and scale
+  items) and `local_arcs_get_grades` (with an `itemids` filter), and change log entries
+  for grade items and grades.
