@@ -1,6 +1,6 @@
 # Runs moodle-plugin-ci across the supported Moodle branches.
-# Matrix agreed in notes/compat.md (decision 8): 4.5 and 5.3 on their lowest and
-# highest PHP on both databases; 5.0 to 5.2 on one PHP with PostgreSQL.
+# Matrix: 4.5 and 5.3 on their lowest and highest PHP on both databases;
+# 5.0 to 5.2 on one PHP with PostgreSQL.
 # PostgreSQL 17 and MariaDB 11.4 meet every branch's minimum.
 name: Moodle Plugin CI
 

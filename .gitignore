@@ -4,8 +4,7 @@
 .DS_Store
 /node_modules/
 
-# Development notes and agent instructions live in a private sibling repo
-# (moodle-local_arcs-dev) and are symlinked here.
+# Local development notes, kept outside this repository.
 /AGENTS.md
 /CLAUDE.md
 /design.md
