@@ -48,7 +48,7 @@ class provider implements
     /** @var string The change log table. */
     private const TABLE = 'local_arcs_change';
 
-    /** @var string[] User fields the web service functions can send to Arcs, optional ones included. */
+    /** @var string[] What the web service functions can send to Arcs about a user, optional fields included. */
     private const EXPORTED_USER_FIELDS = [
         'username',
         'idnumber',
@@ -78,6 +78,9 @@ class provider implements
         'timecreated',
         'timemodified',
         'profilefields',
+        'userenrolments',
+        'coursecompletions',
+        'activitycompletions',
     ];
 
     /**

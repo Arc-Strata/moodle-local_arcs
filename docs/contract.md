@@ -75,8 +75,10 @@ Functions that return rows of one kind (the "state functions", such as
   `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
 - Some state functions also take one **filter**, a list of ids that narrows the
-  rows paged by `after` and `limit`: `courseids` (rows in those courses) or
-  `categoryids` (rows in those categories or below them). Paging works the
+  rows paged by `after` and `limit`: `courseids` (rows in those courses),
+  `categoryids` (rows in those categories or below them) or `coursemoduleids`
+  (rows for those course modules). A function that takes two filters accepts
+  only one of them per call. Paging works the
   same with a filter. A filter and `ids` together are refused with
   `invalidparameter`; more than 1000 filter ids are refused with
   `limit_exceeded`. Filter ids that don't exist match nothing. An empty list
@@ -95,7 +97,9 @@ Functions that return rows of one kind (the "state functions", such as
      (such as `local_arcs_get_course_modules`) with `courseids` = [C];
    - a `course_category` `upsert` for category K: page
      `local_arcs_get_categories` and `local_arcs_get_courses` with
-     `categoryids` = [K].
+     `categoryids` = [K];
+   - a `course_module` `upsert` for module M: page
+     `local_arcs_get_activity_completions` with `coursemoduleids` = [M].
 4. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
 5. Also repeat step 2 from time to time (a full reconciliation). The change log
    is a hint: some Moodle code paths change data without telling anyone, and
@@ -226,6 +230,12 @@ Which Moodle events record which changes:
 | `\core\event\course_deleted` | `course` `delete`. |
 | `\core\event\course_module_created`, `course_module_updated` | `course_module` `upsert`, `courseid` = its course. Renaming, hiding, showing and changing completion settings are updates. |
 | `\core\event\course_module_deleted` | `course_module` `delete`. |
+| `\core\event\user_enrolment_created`, `user_enrolment_updated` | `user_enrolment` `upsert`, with `userid` and `courseid`. |
+| `\core\event\user_enrolment_deleted` | `user_enrolment` `delete`, with `userid` and `courseid`. |
+| `\core\event\enrol_instance_updated` | `course` `upsert`: an enrolment method's status decides whether every enrolment through it is in effect. |
+| `\core\event\role_assigned`, `role_unassigned`, in a course | `user_enrolment` `upsert` for each of the user's enrolments in that course (they carry the user's roles). Nothing for roles in other contexts. |
+| `\core\event\course_completed` | `course_completion` `upsert`, with `userid` and `courseid`. |
+| `\core\event\course_module_completion_updated` | `activity_completion` `upsert`, with `userid` and `courseid`. Viewing an activity is recorded this way when viewing counts towards its completion. |
 
 Changes to the site course's modules (front page activities) are not
 recorded, since they are not exported.
@@ -247,6 +257,8 @@ a change of their own):
   user enrolments, course and activity completions, grade items and grades.
 - A **`course_module` delete** means its activity completions and grade items
   are gone.
+- Deleting an enrolment method unenrols each user through it first, so each
+  enrolment has its own `user_enrolment` `delete`.
 
 **Upserts that mean "refetch what is under it"** (Moodle changes those rows
 without changes of their own; see "Keeping in sync", step 3):
@@ -256,6 +268,10 @@ without changes of their own; see "Keeping in sync", step 3):
 - A **`course_category` upsert**: the categories below it (hiding, showing and
   moving change their `visible` and `path`) and the courses in it and below it
   (hiding and showing change their `visible`).
+- A **`course_module` upsert**: its activity completions. When a teacher
+  changes an activity's completion settings after users have completion data,
+  Moodle deletes that data and recalculates it, recording only the users who
+  end up with a new state.
 
 **Changes Moodle makes without any event**, which only a full reconciliation
 finds:
@@ -265,6 +281,13 @@ finds:
 - On Moodle 5.3 and later, a course waiting for asynchronous deletion is hidden
   and has `deletioninprogress` set. Its `course` `delete` is recorded when the
   deletion runs.
+- Moodle's completion tasks create course completion rows when users enrol and
+  update them as users start (`timeenrolled`, `timestarted`, `reaggregate`).
+  Only a course's completion (`timecompleted`) is recorded.
+- Renaming a role changes the `shortname` in every user enrolment that lists
+  it. Key roles by `roleid`.
+- The LDAP enrolment method suspends and reactivates enrolments (`status`)
+  directly.
 
 Errors: `limit_exceeded`, `invalidparameter`, `cursor_expired`.
 
@@ -432,5 +455,92 @@ Each course module:
 | `completionview` | bool | Whether completion requires viewing the module. |
 | `added` | int | When the module was added. |
 | `deletioninprogress` | bool | Whether the module is waiting to be deleted. |
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_user_enrolments
+
+User enrolments, from Moodle's `user_enrolments` table, with their enrolment
+method and the user's roles in the course. A state function (see "Paging"):
+returns `userenrolments` and `next`.
+
+Parameters: `after`, `limit`, `ids` (user enrolment ids), as in "Paging", and
+the filter `courseids`.
+
+A user can have several enrolments in one course, one per enrolment method.
+An enrolment is in effect when its `status` and `enrolstatus` are both 0 and
+the current time is within `timestart` and `timeend` (where set).
+
+Each user enrolment:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | User enrolment id. |
+| `enrolid` | int | The enrolment method instance it belongs to. |
+| `userid` | int | User id. |
+| `courseid` | int | Course id. |
+| `enrol` | string | Enrolment method, such as `manual`, `self`, `cohort`, `meta` or `ldap`. |
+| `enrolstatus` | int | The enrolment method instance's status: 0 enabled, 1 disabled. |
+| `status` | int | The enrolment's status: 0 active, 1 suspended. |
+| `timestart`, `timeend` | int | When the enrolment starts and ends; 0 if not limited. |
+| `timecreated`, `timemodified` | int | When the enrolment was created and last changed. |
+| `roles` | list | The user's roles in the course: `roleid` and `shortname` (such as `student`, `editingteacher`), each listed once, in Moodle's role order. |
+
+**Roles** are those assigned to the user directly in the course, by hand or by
+an enrolment method. Roles assigned in a category or site-wide, and roles held
+without an enrolment, are not included. Key roles by `roleid`: a role's
+`shortname` can be renamed.
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_course_completions
+
+Course completions, from Moodle's `course_completions` table: one row per user
+and course that completion tracking has seen. A state function (see
+"Paging"): returns `coursecompletions` and `next`.
+
+Parameters: `after`, `limit`, `ids` (course completion ids), as in "Paging",
+and the filter `courseids`.
+
+Each course completion:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Course completion id. |
+| `userid` | int | User id. |
+| `course` | int | Course id. |
+| `timeenrolled` | int | When completion tracking saw the user enrol; 0 if unknown. |
+| `timestarted` | int | When the user started the course; 0 if not started. |
+| `timecompleted` | int or null | When the user completed the course; null until they do. |
+| `reaggregate` | int | When Moodle is due to recalculate this completion; 0 if not due. |
+
+A row exists only once Moodle's completion tasks or a completion have created
+it, so a user enrolled in a course may have none yet. Rows of deleted users
+stay.
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_activity_completions
+
+Activity completions, from Moodle's `course_modules_completion` table, with
+whether the user viewed the activity. A state function (see "Paging"):
+returns `activitycompletions` and `next`.
+
+Parameters: `after`, `limit`, `ids` (activity completion ids), as in
+"Paging", and one of two filters: `courseids` or `coursemoduleids`.
+
+Each activity completion:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Activity completion id. |
+| `coursemoduleid` | int | Course module id (see `local_arcs_get_course_modules`). |
+| `userid` | int | User id. |
+| `completionstate` | int | 0 incomplete, 1 complete, 2 complete and passed, 3 complete and failed, 4 failed with a grade hidden from the user. |
+| `viewed` | bool | Whether the user has viewed the activity. Moodle records views only for activities where viewing counts towards completion. |
+| `timemodified` | int | When the completion state last changed. |
+
+A row exists once a user has some completion state for the activity; no row
+means no completion data. Rows of deleted users stay.
 
 Errors: `limit_exceeded`, `invalidparameter`.

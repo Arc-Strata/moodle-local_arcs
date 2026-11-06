@@ -122,4 +122,44 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'course_module_deleted'],
         'internal' => false,
     ],
+    [
+        'eventname' => \core\event\enrol_instance_updated::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\user_enrolment_created::class,
+        'callback' => [\local_arcs\observer::class, 'user_enrolment_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\user_enrolment_updated::class,
+        'callback' => [\local_arcs\observer::class, 'user_enrolment_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\user_enrolment_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'user_enrolment_deleted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\role_assigned::class,
+        'callback' => [\local_arcs\observer::class, 'role_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\role_unassigned::class,
+        'callback' => [\local_arcs\observer::class, 'role_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_completed::class,
+        'callback' => [\local_arcs\observer::class, 'course_completed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_module_completion_updated::class,
+        'callback' => [\local_arcs\observer::class, 'activity_completion_updated'],
+        'internal' => false,
+    ],
 ];

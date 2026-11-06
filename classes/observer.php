@@ -93,10 +93,11 @@ class observer {
      *
      * Restore, reset and content deletion write the course's modules, enrolments, completions
      * and grades directly, and editing completion criteria changes their meaning, so each of
-     * these is recorded as a course upsert.
+     * these is recorded as a course upsert. So is a change to an enrolment method instance,
+     * since its status decides whether every enrolment through it is in effect.
      *
      * @param \core\event\base $event course_created, course_updated, course_restored, course_reset_ended,
-     *     course_content_deleted or course_completion_updated.
+     *     course_content_deleted, course_completion_updated or enrol_instance_updated.
      */
     public static function course_upserted(\core\event\base $event): void {
         self::recorder()->record(entity::COURSE, $event->courseid, operation::UPSERT, null, $event->courseid);
@@ -133,6 +134,95 @@ class observer {
             return;
         }
         self::recorder()->record(entity::COURSE_MODULE, $event->objectid, operation::DELETE, null, $event->courseid);
+    }
+
+    /**
+     * A user enrolment was created or updated.
+     *
+     * @param \core\event\base $event user_enrolment_created or user_enrolment_updated.
+     */
+    public static function user_enrolment_upserted(\core\event\base $event): void {
+        self::recorder()->record(
+            entity::USER_ENROLMENT,
+            $event->objectid,
+            operation::UPSERT,
+            $event->relateduserid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A user enrolment was deleted.
+     *
+     * @param \core\event\user_enrolment_deleted $event The event.
+     */
+    public static function user_enrolment_deleted(\core\event\user_enrolment_deleted $event): void {
+        self::recorder()->record(
+            entity::USER_ENROLMENT,
+            $event->objectid,
+            operation::DELETE,
+            $event->relateduserid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A role was assigned or unassigned. In a course context, the user's enrolments in that
+     * course carry their roles, so each is recorded as an upsert.
+     *
+     * The enrolments are looked up when the observer runs, after the change has committed.
+     * Unenrolling a user unassigns their roles just before deleting the enrolment, so this
+     * may record an upsert for it right before its delete; readers find nothing to fetch.
+     *
+     * @param \core\event\base $event role_assigned or role_unassigned.
+     */
+    public static function role_changed(\core\event\base $event): void {
+        global $DB;
+        if ($event->contextlevel != CONTEXT_COURSE) {
+            return;
+        }
+
+        $courseid = (int) $event->contextinstanceid;
+        $userid = (int) $event->relateduserid;
+        $sql = "SELECT ue.id
+                  FROM {user_enrolments} ue
+                  JOIN {enrol} e ON e.id = ue.enrolid
+                 WHERE e.courseid = :courseid
+                   AND ue.userid = :userid";
+        $recorder = self::recorder();
+        foreach ($DB->get_fieldset_sql($sql, ['courseid' => $courseid, 'userid' => $userid]) as $id) {
+            $recorder->record(entity::USER_ENROLMENT, (int) $id, operation::UPSERT, $userid, $courseid);
+        }
+    }
+
+    /**
+     * A user completed a course.
+     *
+     * @param \core\event\course_completed $event The event.
+     */
+    public static function course_completed(\core\event\course_completed $event): void {
+        self::recorder()->record(
+            entity::COURSE_COMPLETION,
+            $event->objectid,
+            operation::UPSERT,
+            $event->relateduserid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A user's completion of an activity changed, including viewing it when that counts towards completion.
+     *
+     * @param \core\event\course_module_completion_updated $event The event.
+     */
+    public static function activity_completion_updated(\core\event\course_module_completion_updated $event): void {
+        self::recorder()->record(
+            entity::ACTIVITY_COMPLETION,
+            $event->objectid,
+            operation::UPSERT,
+            $event->relateduserid,
+            $event->courseid
+        );
     }
 
     /**

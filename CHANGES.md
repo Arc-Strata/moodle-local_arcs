@@ -16,3 +16,7 @@ contract version and are listed here.
 - Web service functions `local_arcs_get_categories`, `local_arcs_get_courses` and
   `local_arcs_get_course_modules`, with `categoryids` and `courseids` filters, and change
   log entries for categories, courses and course modules.
+- Web service functions `local_arcs_get_user_enrolments` (with roles),
+  `local_arcs_get_course_completions` and `local_arcs_get_activity_completions` (with a
+  `coursemoduleids` filter), and change log entries for enrolments, role changes and
+  completions.
