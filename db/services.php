@@ -25,6 +25,14 @@
 defined('MOODLE_INTERNAL') || die();
 
 $functions = [
+    'local_arcs_get_changes' => [
+        'classname' => \local_arcs\external\get_changes::class,
+        'description' => 'Returns a page of the change log: which records changed, by id, after a cursor.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_site_info' => [
         'classname' => \local_arcs\external\get_site_info::class,
         'description' => 'Returns the contract version, plugin and Moodle versions, site identity and log store state.',
@@ -38,6 +46,7 @@ $functions = [
 $services = [
     'Arcs connector' => [
         'functions' => [
+            'local_arcs_get_changes',
             'local_arcs_get_site_info',
         ],
         'shortname' => 'local_arcs',

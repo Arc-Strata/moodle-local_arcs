@@ -70,7 +70,21 @@ releases) share one shape:
   `id` order, and `after` is ignored. At most `limit` ids may be given. This is
   how a reader follows the change log to fetch current state.
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
-  `limit_exceeded`.
+  `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
+  Moodle's `invalidparameter`.
+
+## Keeping in sync
+
+1. Call `local_arcs_get_site_info`. Check `contractversion`, and note
+   `changeloghighwatermark` as your starting cursor.
+2. Read every entity in full with the state functions.
+3. From then on, call `local_arcs_get_changes` with your cursor, fetch the
+   current state of each named record through the state functions' `ids`
+   filter, and store the returned `next` as your cursor.
+4. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
+5. Also repeat step 2 from time to time (a full reconciliation). The change log
+   is a hint: some Moodle code paths change data without telling anyone, and
+   the state functions are always the truth.
 
 ## Versioning
 
@@ -105,5 +119,82 @@ Returns an object:
 | `timezone` | string | The site's default timezone (an IANA name, such as `Europe/London`). |
 | `logstoreenabled` | bool | Whether Moodle's standard log store is enabled, so that new events are recorded. |
 | `logstorelifetime` | int | Days the standard log store keeps rows before Moodle deletes them; 0 means forever. |
+| `changelogoldestid` | int or null | Lowest change id currently kept, or null when the change log is empty. |
+| `changelognewestid` | int or null | Highest change id currently kept, or null when the change log is empty. |
+| `changeloghighwatermark` | int | Highest change id a reader may read up to now (see `local_arcs_get_changes`). A new reader starts here. |
+| `changelogpurgedupto` | int | Every change up to this id has been deleted for age; a cursor below it is expired. 0 when nothing has been deleted. |
+| `changelogretentiondays` | int | Days the change log keeps rows. Read changes more often than this. |
 
 Errors: none beyond the access errors above.
+
+### local_arcs_get_changes
+
+The change log: which records changed, by id, in the order the changes were
+recorded. Rows hold ids and times only, never field values; fetch the current
+state of each record from its state function.
+
+Parameters:
+
+| Name | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `after` | int | 0 | Cursor: return changes with a higher id. |
+| `limit` | int | 1000 | Most changes to return; at most 1000. |
+
+There is no `ids` parameter; the change log is read by cursor only.
+
+Returns an object:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `changes` | list | The changes with `after < id <= highwatermark`, in ascending `id` order, at most `limit`. |
+| `next` | int | The cursor to pass as `after` on the next call. Always set. It never passes `highwatermark`. |
+| `hasmore` | bool | Whether more changes are ready now. When false, wait before calling again. |
+| `highwatermark` | int | The highest change id a reader may read up to now. |
+
+Each change:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Change id. Ascending, but not contiguous: gaps are normal. |
+| `entity` | string | Kind of record; see the table below. |
+| `entityid` | int | The record's id in its Moodle table. |
+| `op` | string | `upsert` (created or changed: fetch its current state) or `delete`. |
+| `userid` | int or null | The user the record belongs to, when it has one. |
+| `courseid` | int or null | The course the record belongs to, when it has one. |
+| `timecreated` | int | When the change was recorded. |
+
+An `upsert` for a record that no longer exists by the time you fetch it means
+it was deleted after the change was recorded.
+
+**The high-water mark.** Change ids are allocated before the change is
+committed, so under load a lower id can become visible after a higher one. The
+plugin therefore only returns changes up to the highest id recorded at least
+60 seconds ago. No change below the mark can still appear, so a reader that
+never moves its cursor past the mark never misses one.
+
+**Expiry.** Changes are kept for `changelogretentiondays`, then deleted
+oldest first. If `after` is below `changelogpurgedupto`, changes you have not
+read are gone, and the call fails with `cursor_expired`: read everything again
+(see "Keeping in sync").
+
+Entities:
+
+| `entity` | `entityid` is | Notes |
+| --- | --- | --- |
+| `user` | `user.id` | |
+| `profile_field` | `user_info_field.id` | |
+| `cohort` | `cohort.id` | |
+| `cohort_member` | `cohort.id` | The member is `userid`. Membership rows are named by the pair (cohort, user). |
+| `course_category` | `course_categories.id` | |
+| `course` | `course.id` | An `upsert` also means: refetch everything in the course (modules, enrolments, completions, grades). |
+| `course_module` | `course_modules.id` | |
+| `user_enrolment` | `user_enrolments.id` | |
+| `course_completion` | `course_completions.id` | |
+| `activity_completion` | `course_modules_completion.id` | |
+| `grade_item` | `grade_items.id` | |
+| `grade` | `grade_grades.id` | |
+
+Which Moodle events record which changes, and which deletes imply which, is
+listed per entity as each state function is added.
+
+Errors: `limit_exceeded`, `invalidparameter`, `cursor_expired`.

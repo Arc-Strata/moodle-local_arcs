@@ -16,6 +16,10 @@
 
 namespace local_arcs\local;
 
+use local_arcs\local\changelog\reader;
+use local_arcs\local\changelog\retention;
+use local_arcs\local\settings\settings;
+
 /**
  * Collects the site-level facts Arcs reads before each sync.
  *
@@ -29,12 +33,21 @@ class site_info {
      *
      * @param \stdClass $cfg The site configuration ($CFG).
      * @param logstore $logstore The standard log store's state.
+     * @param reader $changes The change log reader.
+     * @param retention $retention The change log's retention state.
+     * @param settings $settings The plugin's settings.
      */
     public function __construct(
         /** @var \stdClass The site configuration ($CFG). */
         private \stdClass $cfg,
         /** @var logstore The standard log store's state. */
         private logstore $logstore,
+        /** @var reader The change log reader. */
+        private reader $changes,
+        /** @var retention The change log's retention state. */
+        private retention $retention,
+        /** @var settings The plugin's settings. */
+        private settings $settings,
     ) {
     }
 
@@ -45,6 +58,7 @@ class site_info {
      */
     public function export(): array {
         $plugin = \core\plugin_manager::instance()->get_plugin_info('local_arcs');
+        $bounds = $this->changes->bounds();
 
         return [
             'contractversion' => contract::VERSION,
@@ -57,6 +71,11 @@ class site_info {
             'timezone' => \core_date::get_server_timezone(),
             'logstoreenabled' => $this->logstore->is_enabled(),
             'logstorelifetime' => $this->logstore->lifetime_days(),
+            'changelogoldestid' => $bounds['oldest'],
+            'changelognewestid' => $bounds['newest'],
+            'changeloghighwatermark' => $this->changes->high_water_mark(),
+            'changelogpurgedupto' => $this->retention->purged_up_to(),
+            'changelogretentiondays' => $this->settings->retention_days(),
         ];
     }
 }

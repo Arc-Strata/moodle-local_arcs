@@ -20,7 +20,10 @@ use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
+use local_arcs\local\changelog\reader;
+use local_arcs\local\changelog\retention;
 use local_arcs\local\logstore;
+use local_arcs\local\settings\settings;
 use local_arcs\local\site_info;
 
 /**
@@ -46,14 +49,17 @@ class get_site_info extends external_api {
      * @return array
      */
     public static function execute(): array {
-        global $CFG;
+        global $CFG, $DB;
 
         self::validate_parameters(self::execute_parameters(), []);
         $context = \core\context\system::instance();
         self::validate_context($context);
         require_capability('local/arcs:export', $context);
 
-        return (new site_info($CFG, new logstore()))->export();
+        $clock = \core\di::get(\core\clock::class);
+        $retention = new retention($DB, $clock);
+        $info = new site_info($CFG, new logstore(), new reader($DB, $clock, $retention), $retention, new settings());
+        return $info->export();
     }
 
     /**
@@ -73,6 +79,11 @@ class get_site_info extends external_api {
             'timezone' => new external_value(PARAM_TIMEZONE, 'Site default timezone; all timestamps are Unix seconds'),
             'logstoreenabled' => new external_value(PARAM_BOOL, 'Whether the standard log store is enabled'),
             'logstorelifetime' => new external_value(PARAM_INT, 'Days the standard log store keeps rows; 0 means forever'),
+            'changelogoldestid' => new external_value(PARAM_INT, 'Lowest change id, or null', VALUE_REQUIRED, null, NULL_ALLOWED),
+            'changelognewestid' => new external_value(PARAM_INT, 'Highest change id, or null', VALUE_REQUIRED, null, NULL_ALLOWED),
+            'changeloghighwatermark' => new external_value(PARAM_INT, 'Highest change id readers may read up to now'),
+            'changelogpurgedupto' => new external_value(PARAM_INT, 'Highest change id deleted for age; lower cursors are expired'),
+            'changelogretentiondays' => new external_value(PARAM_INT, 'Days the change log keeps rows'),
         ]);
     }
 }

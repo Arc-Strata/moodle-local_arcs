@@ -17,7 +17,12 @@
 namespace local_arcs\external;
 
 use core_external\external_api;
+use local_arcs\local\changelog\entity;
+use local_arcs\local\changelog\operation;
+use local_arcs\local\changelog\reader;
+use local_arcs\local\changelog\recorder;
 use local_arcs\local\contract;
+use local_arcs\tests\exporter_trait;
 
 #[\PHPUnit\Framework\Attributes\CoversClass(get_site_info::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\local_arcs\local\site_info::class)]
@@ -34,18 +39,7 @@ use local_arcs\local\contract;
  * @covers     \local_arcs\local\logstore
  */
 final class get_site_info_test extends \advanced_testcase {
-    /**
-     * Creates a user holding local/arcs:export at system level and makes them the current user.
-     */
-    private function set_exporter(): void {
-        $generator = $this->getDataGenerator();
-        $user = $generator->create_user();
-        $roleid = $generator->create_role();
-        $systemcontext = \core\context\system::instance();
-        assign_capability('local/arcs:export', CAP_ALLOW, $roleid, $systemcontext->id);
-        role_assign($roleid, $user->id, $systemcontext->id);
-        $this->setUser($user);
-    }
+    use exporter_trait;
 
     /**
      * Calls the function as the web service layer would and cleans the result.
@@ -74,6 +68,36 @@ final class get_site_info_test extends \advanced_testcase {
         $this->assertSame(get_site_identifier(), $result['siteidentifier']);
         $this->assertSame($CFG->wwwroot, $result['wwwroot']);
         $this->assertSame(\core_date::get_server_timezone(), $result['timezone']);
+        $this->assertNull($result['changelogoldestid']);
+        $this->assertNull($result['changelognewestid']);
+        $this->assertSame(0, $result['changeloghighwatermark']);
+        $this->assertSame(0, $result['changelogpurgedupto']);
+        $this->assertSame(30, $result['changelogretentiondays']);
+    }
+
+    /**
+     * The change log's bounds, high-water mark, purge mark and retention are reported.
+     */
+    public function test_execute_reports_change_log(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->set_exporter();
+        set_config('retentiondays', 7, 'local_arcs');
+        $clock = $this->mock_clock_with_frozen(1700000000);
+        $recorder = new recorder($DB, $clock);
+        $recorder->record(entity::USER, 1, operation::UPSERT, 1);
+        $clock->bump(reader::SETTLE_SECONDS);
+        $recorder->record(entity::USER, 2, operation::UPSERT, 2);
+        [$first, $second] = array_map('intval', $DB->get_fieldset_sql('SELECT id FROM {local_arcs_change} ORDER BY id'));
+        set_config('purgedupto', $first - 1, 'local_arcs');
+
+        $result = $this->call();
+
+        $this->assertSame($first, $result['changelogoldestid']);
+        $this->assertSame($second, $result['changelognewestid']);
+        $this->assertSame($first, $result['changeloghighwatermark']);
+        $this->assertSame($first - 1, $result['changelogpurgedupto']);
+        $this->assertSame(7, $result['changelogretentiondays']);
     }
 
     /**
