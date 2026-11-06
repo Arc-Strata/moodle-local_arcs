@@ -28,6 +28,7 @@ use local_arcs\local\source\source;
  * The paging parameters, checks and return shape shared by the state functions.
  *
  * A state function returns rows of one kind, by cursor (after, limit) or by id (ids).
+ * Some also take one filter (such as courseids) that narrows the rows paged by cursor.
  * Each subclass still validates its own parameters, context and capability in execute.
  *
  * @package    local_arcs
@@ -51,6 +52,41 @@ abstract class state_function extends external_api {
                 []
             ),
         ];
+    }
+
+    /**
+     * Describes a filter parameter: a list of ids that narrows the rows, such as courseids.
+     *
+     * @param string $description What the filter keeps.
+     * @return external_multiple_structure
+     */
+    protected static function filter_parameter(string $description): external_multiple_structure {
+        return new external_multiple_structure(
+            new external_value(PARAM_INT, 'Id'),
+            $description . '; cannot be combined with ids',
+            VALUE_DEFAULT,
+            []
+        );
+    }
+
+    /**
+     * Checks a filter parameter against the ids parameter and the maximum.
+     *
+     * @param int[] $ids The ids parameter.
+     * @param int[] $filterids The filter's ids.
+     * @return int[] The filter's ids, each once.
+     * @throws invalid_parameter_exception When both ids and the filter are given.
+     * @throws moodle_exception limit_exceeded, when the filter has more ids than MAX_LIMIT.
+     */
+    protected static function check_filter(array $ids, array $filterids): array {
+        if ($ids && $filterids) {
+            throw new invalid_parameter_exception('ids cannot be combined with a filter');
+        }
+        $filterids = array_values(array_unique($filterids));
+        if (count($filterids) > source::MAX_LIMIT) {
+            throw new moodle_exception('limit_exceeded', 'local_arcs', '', source::MAX_LIMIT);
+        }
+        return $filterids;
     }
 
     /**

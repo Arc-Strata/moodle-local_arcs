@@ -67,6 +67,18 @@ abstract class source {
     abstract protected function id_column(): string;
 
     /**
+     * A condition every record must meet, on top of the cursor or ids, with its named parameters.
+     *
+     * Subclasses override it to leave records out (such as the site course) or to apply
+     * a reader's filter (such as courseids). The default is no condition.
+     *
+     * @return array [string $sql, array $params]; $sql is empty for no condition.
+     */
+    protected function filter(): array {
+        return ['', []];
+    }
+
+    /**
      * Shapes a page of records for the web service.
      *
      * @param \stdClass[] $records The records, in ascending id order.
@@ -99,7 +111,8 @@ abstract class source {
      * Returns the records with the given ids that exist.
      *
      * @param int[] $ids The ids. Callers keep the number of ids within MAX_LIMIT.
-     * @return array With 'rows' (the shaped records, in ascending id order) and 'next' (always null).
+     * @return array With 'rows' (the shaped records that exist and meet the filter, in ascending
+     *     id order) and 'next' (always null).
      */
     public function by_ids(array $ids): array {
         [$insql, $params] = $this->db->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'id');
@@ -116,6 +129,12 @@ abstract class source {
      * @return \stdClass[] The records, as a list.
      */
     private function read(string $where, array $params, int $limit): array {
+        [$filtersql, $filterparams] = $this->filter();
+        if ($filtersql !== '') {
+            $where .= ' AND ' . $filtersql;
+            $params += $filterparams;
+        }
+
         $sql = 'SELECT ' . $this->fields() .
               ' FROM ' . $this->from() .
              ' WHERE ' . $where .

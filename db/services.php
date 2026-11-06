@@ -25,9 +25,33 @@
 defined('MOODLE_INTERNAL') || die();
 
 $functions = [
+    'local_arcs_get_categories' => [
+        'classname' => \local_arcs\external\get_categories::class,
+        'description' => 'Returns course categories, by cursor, by id, or below given categories.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_changes' => [
         'classname' => \local_arcs\external\get_changes::class,
         'description' => 'Returns a page of the change log: which records changed, by id, after a cursor.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
+    'local_arcs_get_course_modules' => [
+        'classname' => \local_arcs\external\get_course_modules::class,
+        'description' => 'Returns course modules with their type and instance name, by cursor, by id, or by course.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
+    'local_arcs_get_courses' => [
+        'classname' => \local_arcs\external\get_courses::class,
+        'description' => 'Returns courses other than the site course, by cursor, by id, or by category.',
         'type' => 'read',
         'capabilities' => 'local/arcs:export',
         'ajax' => false,
@@ -62,7 +86,10 @@ $functions = [
 $services = [
     'Arcs connector' => [
         'functions' => [
+            'local_arcs_get_categories',
             'local_arcs_get_changes',
+            'local_arcs_get_course_modules',
+            'local_arcs_get_courses',
             'local_arcs_get_profile_fields',
             'local_arcs_get_site_info',
             'local_arcs_get_users',

@@ -57,4 +57,69 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'profile_field_deleted'],
         'internal' => false,
     ],
+    [
+        'eventname' => \core\event\course_category_created::class,
+        'callback' => [\local_arcs\observer::class, 'course_category_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_category_updated::class,
+        'callback' => [\local_arcs\observer::class, 'course_category_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_category_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'course_category_deleted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_created::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_updated::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_restored::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_reset_ended::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_content_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_completion_updated::class,
+        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'course_deleted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_module_created::class,
+        'callback' => [\local_arcs\observer::class, 'course_module_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_module_updated::class,
+        'callback' => [\local_arcs\observer::class, 'course_module_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\course_module_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'course_module_deleted'],
+        'internal' => false,
+    ],
 ];

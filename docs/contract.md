@@ -74,6 +74,13 @@ Functions that return rows of one kind (the "state functions", such as
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
   `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
+- Some state functions also take one **filter**, a list of ids that narrows the
+  rows paged by `after` and `limit`: `courseids` (rows in those courses) or
+  `categoryids` (rows in those categories or below them). Paging works the
+  same with a filter. A filter and `ids` together are refused with
+  `invalidparameter`; more than 1000 filter ids are refused with
+  `limit_exceeded`. Filter ids that don't exist match nothing. An empty list
+  means "no filter".
 
 ## Keeping in sync
 
@@ -82,7 +89,13 @@ Functions that return rows of one kind (the "state functions", such as
 2. Read every entity in full with the state functions.
 3. From then on, call `local_arcs_get_changes` with your cursor, fetch the
    current state of each named record through the state functions' `ids`
-   filter, and store the returned `next` as your cursor.
+   filter, and store the returned `next` as your cursor. Two kinds of change
+   also mean "refetch what is under this record", through the filters:
+   - a `course` `upsert` for course C: page every course-scoped function
+     (such as `local_arcs_get_course_modules`) with `courseids` = [C];
+   - a `course_category` `upsert` for category K: page
+     `local_arcs_get_categories` and `local_arcs_get_courses` with
+     `categoryids` = [K].
 4. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
 5. Also repeat step 2 from time to time (a full reconciliation). The change log
    is a hint: some Moodle code paths change data without telling anyone, and
@@ -205,6 +218,17 @@ Which Moodle events record which changes:
 | `\core\event\user_deleted` | `user` `delete`, `userid` = the user. |
 | `\core\event\user_info_field_created`, `user_info_field_updated` | `profile_field` `upsert`. |
 | `\core\event\user_info_field_deleted` | `profile_field` `delete`. |
+| `\core\event\course_category_created`, `course_category_updated` | `course_category` `upsert`. Moving, hiding and showing a category are updates. |
+| `\core\event\course_category_deleted` | `course_category` `delete`. |
+| `\core\event\course_created`, `course_updated` | `course` `upsert`, `courseid` = the course. |
+| `\core\event\course_restored`, `course_reset_ended`, `course_content_deleted` | `course` `upsert`. These write the course's modules, enrolments, completions and grades without changes of their own. |
+| `\core\event\course_completion_updated` (completion criteria saved) | `course` `upsert`. |
+| `\core\event\course_deleted` | `course` `delete`. |
+| `\core\event\course_module_created`, `course_module_updated` | `course_module` `upsert`, `courseid` = its course. Renaming, hiding, showing and changing completion settings are updates. |
+| `\core\event\course_module_deleted` | `course_module` `delete`. |
+
+Changes to the site course's modules (front page activities) are not
+recorded, since they are not exported.
 
 Changes are recorded only after the Moodle transaction that made them commits,
 so a change that is rolled back is never listed.
@@ -217,6 +241,30 @@ a change of their own):
   enrolments, completions, grades and cohort memberships as gone, and erase
   the person downstream.
 - A **`profile_field` delete** means every user's value for that field is gone.
+- A **`course_category` delete** comes with a delete, or an update for a move,
+  of each category and course that was in it.
+- A **`course` delete** means everything in the course is gone: its modules,
+  user enrolments, course and activity completions, grade items and grades.
+- A **`course_module` delete** means its activity completions and grade items
+  are gone.
+
+**Upserts that mean "refetch what is under it"** (Moodle changes those rows
+without changes of their own; see "Keeping in sync", step 3):
+
+- A **`course` upsert**: the course's modules, enrolments, completions and
+  grades.
+- A **`course_category` upsert**: the categories below it (hiding, showing and
+  moving change their `visible` and `path`) and the courses in it and below it
+  (hiding and showing change their `visible`).
+
+**Changes Moodle makes without any event**, which only a full reconciliation
+finds:
+
+- Moving a course module to another section changes its `section`, and moving
+  it into a hidden section hides it.
+- On Moodle 5.3 and later, a course waiting for asynchronous deletion is hidden
+  and has `deletioninprogress` set. Its `course` `delete` is recorded when the
+  deletion runs.
 
 Errors: `limit_exceeded`, `invalidparameter`, `cursor_expired`.
 
@@ -304,5 +352,85 @@ Each profile field:
 | `datatype` | string | Field type: `text`, `textarea`, `menu`, `checkbox`, `datetime`, `social`, or a third-party type. |
 | `categoryid` | int | The profile field category it is shown under. |
 | `visible` | int | Who can see it in Moodle: 0 nobody, 1 the user, 2 everyone, 3 the user and their teachers. It does not affect the export. |
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_categories
+
+Course categories, from Moodle's `course_categories` table. A state function
+(see "Paging"): returns `categories` and `next`.
+
+Parameters: `after`, `limit`, `ids` (category ids), as in "Paging", and the
+filter `categoryids`: only these categories and every category below them.
+
+Each category:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Category id. |
+| `name` | string | Name, raw. |
+| `idnumber` | string or null | ID number; may be null or empty. |
+| `parent` | int | Parent category id; 0 for a top-level category. |
+| `path` | string | The ids from the top-level category down to this one, such as `/3/12`. |
+| `visible` | bool | Whether the category is visible. A hidden category hides everything in it. |
+| `timemodified` | int | When the category was last changed. |
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_courses
+
+Courses, from Moodle's `course` table. The site course (the front page) is
+never returned, even by id. A state function (see "Paging"): returns
+`courses` and `next`.
+
+Parameters: `after`, `limit`, `ids` (course ids), as in "Paging", and the
+filter `categoryids`: only courses in these categories or in any category below
+them.
+
+Each course:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Course id. |
+| `category` | int | The course's category id. |
+| `shortname`, `fullname` | string | Names, raw. |
+| `idnumber` | string | ID number; empty if not set. |
+| `format` | string | Course format, such as `topics`, `weeks` or `singleactivity`. |
+| `visible` | bool | Whether the course is visible. |
+| `startdate` | int | Start date. |
+| `enddate` | int | End date; 0 if none. |
+| `enablecompletion` | bool | Whether completion tracking is enabled. |
+| `timecreated`, `timemodified` | int | When the course was created and last changed. |
+| `deletioninprogress` | bool | Whether the course is waiting to be deleted (asynchronous course deletion, Moodle 5.3 and later). Always false before 5.3. |
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_course_modules
+
+Course modules (activities and resources), from Moodle's `course_modules`
+table, with each one's type and name. Modules in the site course are never
+returned. A state function (see "Paging"): returns `coursemodules` and `next`.
+
+Parameters: `after`, `limit`, `ids` (course module ids), as in "Paging", and
+the filter `courseids`: only modules in these courses.
+
+Each course module:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Course module id. Other records (completions, grade items) refer to modules by this id. |
+| `course` | int | Course id. |
+| `modname` | string | Module type, such as `quiz`, `scorm`, `assign` or `page`. Includes types that are not learning activities, such as `label`, `subsection` (Moodle 4.5+) and `qbank` (question banks, Moodle 5.0+). |
+| `instance` | int | The instance's id in the module type's own table. |
+| `instancename` | string or null | The instance's name, raw. Null when the module type's plugin is not installed. |
+| `section` | int | The id of the course section it is in. |
+| `idnumber` | string or null | ID number; may be null or empty. |
+| `visible` | bool | Whether the module is visible. |
+| `completion` | int | Completion tracking: 0 none, 1 manual, 2 automatic. |
+| `completionexpected` | int | Date completion is expected by; 0 if none. |
+| `completiongradeitemnumber` | int or null | When completion requires a grade, the item number of the grade item it requires (usually 0); otherwise null. |
+| `completionview` | bool | Whether completion requires viewing the module. |
+| `added` | int | When the module was added. |
+| `deletioninprogress` | bool | Whether the module is waiting to be deleted. |
 
 Errors: `limit_exceeded`, `invalidparameter`.

@@ -68,6 +68,74 @@ class observer {
     }
 
     /**
+     * A course category was created or updated, including moved, hidden or shown.
+     *
+     * Moving, hiding or showing a category also changes the categories and courses below
+     * it without events of their own; readers refetch them with the categoryids filters.
+     *
+     * @param \core\event\base $event course_category_created or course_category_updated.
+     */
+    public static function course_category_upserted(\core\event\base $event): void {
+        self::recorder()->record(entity::COURSE_CATEGORY, $event->objectid, operation::UPSERT);
+    }
+
+    /**
+     * A course category was deleted.
+     *
+     * @param \core\event\course_category_deleted $event The event.
+     */
+    public static function course_category_deleted(\core\event\course_category_deleted $event): void {
+        self::recorder()->record(entity::COURSE_CATEGORY, $event->objectid, operation::DELETE);
+    }
+
+    /**
+     * A course, or what is in it, changed: readers refetch the course and everything in it.
+     *
+     * Restore, reset and content deletion write the course's modules, enrolments, completions
+     * and grades directly, and editing completion criteria changes their meaning, so each of
+     * these is recorded as a course upsert.
+     *
+     * @param \core\event\base $event course_created, course_updated, course_restored, course_reset_ended,
+     *     course_content_deleted or course_completion_updated.
+     */
+    public static function course_upserted(\core\event\base $event): void {
+        self::recorder()->record(entity::COURSE, $event->courseid, operation::UPSERT, null, $event->courseid);
+    }
+
+    /**
+     * A course was deleted, and everything in it with it.
+     *
+     * @param \core\event\course_deleted $event The event.
+     */
+    public static function course_deleted(\core\event\course_deleted $event): void {
+        self::recorder()->record(entity::COURSE, $event->courseid, operation::DELETE, null, $event->courseid);
+    }
+
+    /**
+     * A course module was created or updated. Site course modules are not exported, so they are ignored.
+     *
+     * @param \core\event\base $event course_module_created or course_module_updated.
+     */
+    public static function course_module_upserted(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::COURSE_MODULE, $event->objectid, operation::UPSERT, null, $event->courseid);
+    }
+
+    /**
+     * A course module was deleted. Site course modules are not exported, so they are ignored.
+     *
+     * @param \core\event\course_module_deleted $event The event.
+     */
+    public static function course_module_deleted(\core\event\course_module_deleted $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::COURSE_MODULE, $event->objectid, operation::DELETE, null, $event->courseid);
+    }
+
+    /**
      * The recorder that writes change rows.
      *
      * @return recorder

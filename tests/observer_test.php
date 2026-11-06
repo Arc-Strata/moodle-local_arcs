@@ -16,7 +16,7 @@
 
 namespace local_arcs;
 
-use local_arcs\local\changelog\recorder;
+use local_arcs\tests\changes_trait;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -37,6 +37,8 @@ require_once($CFG->dirroot . '/user/externallib.php');
  * @covers     \local_arcs\observer
  */
 final class observer_test extends \advanced_testcase {
+    use changes_trait;
+
     /**
      * Resets the database the slow way, without rolling back a transaction around the test.
      *
@@ -47,53 +49,6 @@ final class observer_test extends \advanced_testcase {
         parent::setUp();
         $this->resetAfterTest();
         $this->preventResetByRollback();
-    }
-
-    /**
-     * Empties the change log, so a test sees only the rows its own action records.
-     */
-    private function clear_changes(): void {
-        global $DB;
-        $DB->delete_records(recorder::TABLE);
-    }
-
-    /**
-     * The change log rows, without ids and times.
-     *
-     * @return array[]
-     */
-    private function changes(): array {
-        global $DB;
-        $rows = $DB->get_records(recorder::TABLE, null, 'id ASC', 'id, entity, entityid, op, userid, courseid');
-        return array_values(array_map(fn(\stdClass $row): array => [
-            'entity' => $row->entity,
-            'entityid' => (int) $row->entityid,
-            'op' => $row->op,
-            'userid' => $row->userid === null ? null : (int) $row->userid,
-            'courseid' => $row->courseid === null ? null : (int) $row->courseid,
-        ], $rows));
-    }
-
-    /**
-     * A user change row.
-     *
-     * @param int $userid The user.
-     * @param string $op upsert or delete.
-     * @return array
-     */
-    private function user_change(int $userid, string $op): array {
-        return ['entity' => 'user', 'entityid' => $userid, 'op' => $op, 'userid' => $userid, 'courseid' => null];
-    }
-
-    /**
-     * A profile field change row.
-     *
-     * @param int $fieldid The profile field.
-     * @param string $op upsert or delete.
-     * @return array
-     */
-    private function profile_field_change(int $fieldid, string $op): array {
-        return ['entity' => 'profile_field', 'entityid' => $fieldid, 'op' => $op, 'userid' => null, 'courseid' => null];
     }
 
     /**
@@ -113,7 +68,7 @@ final class observer_test extends \advanced_testcase {
         ]]);
 
         $userid = (int) $DB->get_field('user', 'id', ['username' => 'ada']);
-        $this->assertSame([$this->user_change($userid, 'upsert')], $this->changes());
+        $this->assertSame([$this->change('user', $userid, 'upsert', $userid)], $this->changes());
     }
 
     /**
@@ -126,7 +81,7 @@ final class observer_test extends \advanced_testcase {
 
         \core_user_external::update_users([['id' => $user->id, 'department' => 'Sales']]);
 
-        $this->assertSame([$this->user_change((int) $user->id, 'upsert')], $this->changes());
+        $this->assertSame([$this->change('user', (int) $user->id, 'upsert', (int) $user->id)], $this->changes());
     }
 
     /**
@@ -142,7 +97,7 @@ final class observer_test extends \advanced_testcase {
             ['id' => $user->id, 'customfields' => [['type' => 'team', 'value' => 'Blue']]],
         ]);
 
-        $this->assertSame([$this->user_change((int) $user->id, 'upsert')], $this->changes());
+        $this->assertSame([$this->change('user', (int) $user->id, 'upsert', (int) $user->id)], $this->changes());
     }
 
     /**
@@ -154,7 +109,7 @@ final class observer_test extends \advanced_testcase {
 
         delete_user($user);
 
-        $this->assertSame([$this->user_change((int) $user->id, 'delete')], $this->changes());
+        $this->assertSame([$this->change('user', (int) $user->id, 'delete', (int) $user->id)], $this->changes());
     }
 
     /**
@@ -192,7 +147,7 @@ final class observer_test extends \advanced_testcase {
         ]);
 
         $fieldid = (int) $DB->get_field('user_info_field', 'id', ['shortname' => 'team']);
-        $this->assertSame([$this->profile_field_change($fieldid, 'upsert')], $this->changes());
+        $this->assertSame([$this->change('profile_field', $fieldid, 'upsert')], $this->changes());
     }
 
     /**
@@ -206,7 +161,7 @@ final class observer_test extends \advanced_testcase {
         $field->name = 'Squad';
         (new \profile_define_base())->define_save($field);
 
-        $this->assertSame([$this->profile_field_change((int) $field->id, 'upsert')], $this->changes());
+        $this->assertSame([$this->change('profile_field', (int) $field->id, 'upsert')], $this->changes());
     }
 
     /**
@@ -219,6 +174,6 @@ final class observer_test extends \advanced_testcase {
 
         profile_delete_field($field->id);
 
-        $this->assertSame([$this->profile_field_change((int) $field->id, 'delete')], $this->changes());
+        $this->assertSame([$this->change('profile_field', (int) $field->id, 'delete')], $this->changes());
     }
 }
