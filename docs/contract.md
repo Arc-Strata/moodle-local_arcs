@@ -74,13 +74,15 @@ Functions that return rows of one kind (the "state functions", such as
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
   `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
-- Some state functions also take one **filter**, a list of ids that narrows the
+- Some state functions also take a **filter**, a list of ids that narrows the
   rows paged by `after` and `limit`: `courseids` (rows in those courses),
   `categoryids` (rows in those categories or below them), `coursemoduleids`
-  (rows for those course modules) or `itemids` (rows for those grade items). A function that takes two filters accepts
-  only one of them per call. Paging works the
-  same with a filter. A filter and `ids` together are refused with
-  `invalidparameter`; more than 1000 filter ids are refused with
+  (rows for those course modules), `itemids` (rows for those grade items),
+  `cohortids` (rows for those cohorts) or `userids` (rows for those users). A
+  function that takes two filters accepts only one of them per call, except
+  `local_arcs_get_cohort_members`, whose `cohortids` and `userids` combine.
+  Paging works the same with a filter. A filter and `ids` together are refused
+  with `invalidparameter`; more than 1000 ids in a filter are refused with
   `limit_exceeded`. Filter ids that don't exist match nothing. An empty list
   means "no filter".
 
@@ -101,7 +103,11 @@ Functions that return rows of one kind (the "state functions", such as
    - a `course_module` `upsert` for module M: page
      `local_arcs_get_activity_completions` with `coursemoduleids` = [M];
    - a `grade_item` `upsert` for grade item G: page `local_arcs_get_grades`
-     with `itemids` = [G].
+     with `itemids` = [G];
+   - a `course_category` `delete`: page `local_arcs_get_cohorts` in full.
+
+   Cohort memberships are named by cohort and user, not by id (see
+   `local_arcs_get_cohort_members`).
 4. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
 5. Also repeat step 2 from time to time (a full reconciliation). The change log
    is a hint: some Moodle code paths change data without telling anyone, and
@@ -242,6 +248,10 @@ Which Moodle events record which changes:
 | `\core\event\grade_item_deleted` | `grade_item` `delete`. |
 | `\core\event\user_graded` | `grade` `upsert`, with `userid` and `courseid`. Recorded when a user's final grade is set or changes: grading in an activity, overriding in the gradebook, importing, and recalculation. |
 | `\core\event\grade_deleted` | `grade` `delete`, with `userid` and `courseid`. |
+| `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |
+| `\core\event\cohort_deleted` | `cohort` `delete`. |
+| `\core\event\cohort_member_added` | `cohort_member` `upsert`: `entityid` = the cohort, `userid` = the member. |
+| `\core\event\cohort_member_removed` | `cohort_member` `delete`: `entityid` = the cohort, `userid` = the member. |
 
 Changes to the site course's modules (front page activities), and to their
 grade items and grades, are not recorded, since they are not exported.
@@ -262,7 +272,12 @@ a change of their own):
   the person downstream.
 - A **`profile_field` delete** means every user's value for that field is gone.
 - A **`course_category` delete** comes with a delete, or an update for a move,
-  of each category and course that was in it.
+  of each category and course that was in it. The cohorts that belonged to it
+  move to its parent category (or become site-wide) without changes of their
+  own: refetch all cohorts.
+- A **`cohort` delete** means its memberships are gone.
+- A **`cohort_member` delete** means the user is no longer in the cohort:
+  remove the membership with that `cohortid` and `userid`.
 - A **`course` delete** means everything in the course is gone: its modules,
   user enrolments, course and activity completions, grade items and grades.
 - A **`course_module` delete** means its activity completions and grade items
@@ -624,5 +639,62 @@ Each grade:
 
 Pass or fail is `finalgrade >= gradepass` where the item has a `gradepass`
 above 0. Grades of deleted users are deleted by Moodle.
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_cohorts
+
+Cohorts, from Moodle's `cohort` table: site-wide groups of users, often fed by
+an HR system, used to enrol them in courses. A state function (see "Paging"):
+returns `cohorts` and `next`.
+
+Parameters: `after`, `limit`, `ids` (cohort ids), as in "Paging". No filters.
+
+Each cohort:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Cohort id. |
+| `contextid` | int | The Moodle context the cohort belongs to: the system, or a course category. |
+| `categoryid` | int or null | The course category the cohort belongs to (see `local_arcs_get_categories`); null for a site-wide cohort. |
+| `name` | string | Name, raw. |
+| `idnumber` | string or null | ID number; may be null or empty. Often the key an external system uses. |
+| `visible` | bool | Whether the cohort is visible. |
+| `component` | string | The plugin that manages the cohort, such as a synchronisation plugin; empty if none. |
+| `timecreated`, `timemodified` | int | When the cohort was created and last changed. |
+
+The cohort's description, theme and custom fields are not returned.
+
+Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_cohort_members
+
+Cohort memberships, from Moodle's `cohort_members` table: one row per cohort
+and user. A state function (see "Paging"): returns `cohortmembers` and `next`.
+
+Parameters: `after`, `limit`, `ids` (membership ids), as in "Paging", and two
+filters that **can be combined**: `cohortids` (memberships of these cohorts)
+and `userids` (memberships of these users). With both, a row is returned when
+its cohort is in `cohortids` and its user is in `userids`. Neither can be
+combined with `ids`.
+
+Moodle names a membership change by its cohort and user, not by the
+membership's id, so the change log does too (`cohort_member`, with
+`entityid` = the cohort and `userid` = the user). Follow `upsert`s by calling
+this function with their cohorts in `cohortids` and their users in `userids`:
+several changes can be fetched in one call, and any other memberships it
+returns are current too. Key memberships by (`cohortid`, `userid`); Moodle
+does not add the same user to a cohort twice.
+
+Each membership:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Membership id. |
+| `cohortid` | int | Cohort id. |
+| `userid` | int | User id. |
+| `timeadded` | int | When the user was added to the cohort. |
+
+Memberships of deleted users are deleted by Moodle.
 
 Errors: `limit_exceeded`, `invalidparameter`.

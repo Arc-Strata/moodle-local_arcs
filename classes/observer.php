@@ -278,6 +278,43 @@ class observer {
     }
 
     /**
+     * A cohort was created or updated.
+     *
+     * @param \core\event\base $event cohort_created or cohort_updated.
+     */
+    public static function cohort_upserted(\core\event\base $event): void {
+        self::recorder()->record(entity::COHORT, $event->objectid, operation::UPSERT);
+    }
+
+    /**
+     * A cohort was deleted, and its memberships with it.
+     *
+     * @param \core\event\cohort_deleted $event The event.
+     */
+    public static function cohort_deleted(\core\event\cohort_deleted $event): void {
+        self::recorder()->record(entity::COHORT, $event->objectid, operation::DELETE);
+    }
+
+    /**
+     * A user was added to a cohort. The event names the cohort and the user, not the membership,
+     * so the change is recorded by that pair.
+     *
+     * @param \core\event\cohort_member_added $event The event.
+     */
+    public static function cohort_member_added(\core\event\cohort_member_added $event): void {
+        self::recorder()->record(entity::COHORT_MEMBER, $event->objectid, operation::UPSERT, $event->relateduserid);
+    }
+
+    /**
+     * A user was removed from a cohort, recorded by the cohort and the user.
+     *
+     * @param \core\event\cohort_member_removed $event The event.
+     */
+    public static function cohort_member_removed(\core\event\cohort_member_removed $event): void {
+        self::recorder()->record(entity::COHORT_MEMBER, $event->objectid, operation::DELETE, $event->relateduserid);
+    }
+
+    /**
      * The recorder that writes change rows.
      *
      * @return recorder

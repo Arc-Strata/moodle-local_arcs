@@ -23,3 +23,6 @@ contract version and are listed here.
 - Web service functions `local_arcs_get_grade_items` (with course modules and scale
   items) and `local_arcs_get_grades` (with an `itemids` filter), and change log entries
   for grade items and grades.
+- Web service functions `local_arcs_get_cohorts` (with each cohort's category) and
+  `local_arcs_get_cohort_members` (with combinable `cohortids` and `userids` filters),
+  and change log entries for cohorts and memberships.

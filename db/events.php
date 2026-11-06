@@ -187,4 +187,29 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'grade_deleted'],
         'internal' => false,
     ],
+    [
+        'eventname' => \core\event\cohort_created::class,
+        'callback' => [\local_arcs\observer::class, 'cohort_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\cohort_updated::class,
+        'callback' => [\local_arcs\observer::class, 'cohort_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\cohort_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'cohort_deleted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\cohort_member_added::class,
+        'callback' => [\local_arcs\observer::class, 'cohort_member_added'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\cohort_member_removed::class,
+        'callback' => [\local_arcs\observer::class, 'cohort_member_removed'],
+        'internal' => false,
+    ],
 ];

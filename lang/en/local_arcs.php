@@ -36,6 +36,7 @@ $string['privacy:metadata:arcs:address'] = 'The user\'s address (optional).';
 $string['privacy:metadata:arcs:alternatename'] = 'The user\'s alternate name (optional).';
 $string['privacy:metadata:arcs:auth'] = 'The user\'s authentication method.';
 $string['privacy:metadata:arcs:city'] = 'The user\'s city or town (optional).';
+$string['privacy:metadata:arcs:cohortmembers'] = 'The cohorts the user is a member of, and when they were added.';
 $string['privacy:metadata:arcs:confirmed'] = 'Whether the user\'s account is confirmed.';
 $string['privacy:metadata:arcs:country'] = 'The user\'s country (optional).';
 $string['privacy:metadata:arcs:coursecompletions'] = 'The user\'s course completions: when they enrolled, started and completed each course.';

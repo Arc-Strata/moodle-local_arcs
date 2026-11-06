@@ -82,6 +82,7 @@ class provider implements
         'coursecompletions',
         'activitycompletions',
         'grades',
+        'cohortmembers',
     ];
 
     /**
