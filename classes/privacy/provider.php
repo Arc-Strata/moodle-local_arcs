@@ -86,6 +86,7 @@ class provider implements
         'logevents',
         'quizattempts',
         'h5pactivityattempts',
+        'scormattempts',
     ];
 
     /**

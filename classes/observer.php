@@ -436,6 +436,45 @@ class observer {
     }
 
     /**
+     * A SCORM package reported a score, or a completed, passed or failed status, in an attempt.
+     * SCORM packages on the site course are ignored.
+     *
+     * @param \core\event\base $event \mod_scorm\event\scoreraw_submitted or status_submitted.
+     */
+    public static function scorm_attempt_upserted(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(
+            entity::SCORM_ATTEMPT,
+            (int) $event->other['attemptid'],
+            operation::UPSERT,
+            $event->relateduserid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A SCORM attempt was deleted. The event comes after the row is gone and carries the attempt's
+     * number, not its id, so readers refetch the package's attempts; the change is named by the
+     * package's course module. SCORM packages on the site course are ignored.
+     *
+     * @param \mod_scorm\event\attempt_deleted $event The event.
+     */
+    public static function scorm_attempt_deleted(\mod_scorm\event\attempt_deleted $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(
+            entity::SCORM_TRACKING,
+            $event->contextinstanceid,
+            operation::UPSERT,
+            null,
+            $event->courseid
+        );
+    }
+
+    /**
      * A cohort was created or updated.
      *
      * @param \core\event\base $event cohort_created or cohort_updated.

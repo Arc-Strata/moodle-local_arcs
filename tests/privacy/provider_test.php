@@ -110,7 +110,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $items = provider::get_metadata(new collection('local_arcs'))->get_collection();
         $userfields = array_keys(get_users::execute_returns()->keys['users']->content->keys);
         $progress = ['userenrolments', 'coursecompletions', 'activitycompletions', 'grades', 'cohortmembers', 'logevents',
-            'quizattempts', 'h5pactivityattempts'];
+            'quizattempts', 'h5pactivityattempts', 'scormattempts'];
 
         $this->assertEqualsCanonicalizing(
             array_merge(array_values(array_diff($userfields, ['id'])), $progress),

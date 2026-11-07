@@ -114,6 +114,8 @@ Functions that return rows of one kind (the "state functions", such as
      with `itemids` = [G];
    - a `quiz_grading` `upsert` for course module M: page
      `local_arcs_get_quiz_attempts` with `coursemoduleids` = [M];
+   - a `scorm_tracking` `upsert` for course module M: page
+     `local_arcs_get_scorm_attempts` with `coursemoduleids` = [M];
    - a `course_category` `delete`: page `local_arcs_get_cohorts` in full.
 
    Cohort memberships are named by cohort and user, not by id (see
@@ -254,6 +256,8 @@ Entities:
 | `grade` | `grade_grades.id` | |
 | `quiz_attempt` | `quiz_attempts.id` | |
 | `h5pactivity_attempt` | `h5pactivity_attempts.id` | |
+| `scorm_attempt` | `scorm_attempt.id` | |
+| `scorm_tracking` | `course_modules.id` | A SCORM package's attempts. There is no `delete`; an `upsert` means: refetch the package's attempts. |
 | `quiz_grading` | `course_modules.id` | A quiz's marks and maximum grade. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
 
 Which Moodle events record which changes:
@@ -288,6 +292,8 @@ Which Moodle events record which changes:
 | `\mod_quiz\event\question_manually_graded` (a teacher graded a question by hand) | `quiz_attempt` `upsert` for the attempt, with `userid` and `courseid`. Not recorded for previews. |
 | `\mod_quiz\event\attempt_deleted` | `quiz_attempt` `delete`, with `userid` and `courseid`. |
 | `\mod_h5pactivity\event\statement_received` (the activity received a learner's result) | `h5pactivity_attempt` `upsert` for the user's latest attempt at the activity, with `userid` and `courseid`. There is no `delete`: Moodle deletes H5P attempts only with their activity, user or course, or in a reset (see the implied deletes). |
+| `\mod_scorm\event\scoreraw_submitted`, `status_submitted` (a package reported a score, or a `completed`, `passed` or `failed` status) | `scorm_attempt` `upsert`, with `userid` and `courseid`. |
+| `\mod_scorm\event\attempt_deleted` | `scorm_tracking` `upsert`, `entityid` = the package's course module, `courseid` = its course. Moodle names a deleted attempt by its number, not its id, so the package's attempts are refetched; attempts not returned are gone. |
 | `\mod_quiz\event\slot_mark_updated` (a question's mark changed), `quiz_grade_updated` (the quiz's maximum grade changed) | `quiz_grading` `upsert`, `entityid` = the quiz's course module, `courseid` = its course. Moodle rewrites every attempt's `sumgrades`, or every attempt's `grade`, without changes of their own. |
 | `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |
 | `\core\event\cohort_deleted` | `cohort` `delete`. |
@@ -349,6 +355,8 @@ without changes of their own; see "Keeping in sync", step 3):
   end up with a new state.
 - A **`grade_item` upsert**: its grades. Hiding, showing, locking and
   unlocking an item also set the `hidden` and locked state of its grades.
+- A **`scorm_tracking` upsert**: the package's attempts. An attempt was
+  deleted; it is the one no longer returned.
 - A **`quiz_grading` upsert**: the quiz's attempts. Changing a question's mark
   rewrites every finished attempt's `sumgrades` and `timemodified`, and the
   quiz's `maxsumgrades`; changing the quiz's maximum grade changes every
@@ -380,8 +388,15 @@ finds:
   grade's `hidden` or `overridden` flag, its feedback, or its `rawgrade` while
   it is overridden or locked, records nothing.
 - When the site's data retention (Privacy and policies) deletes the data of
-  an expired course or activity, H5P activity attempts go without a change
-  of their own.
+  an expired course or activity, H5P activity and SCORM attempts go without a
+  change of their own.
+- A SCORM attempt is recorded only when the package reports a score, or a
+  `completed`, `passed` or `failed` status. An attempt whose SCOs have only
+  reported `incomplete`, `browsed` or `not attempted`, and a change only to
+  a SCO's score range or start time, records nothing until then.
+- A learner deleting their own SCORM attempts (a capability no role has by
+  default) records nothing. So does updating a package so that a SCO is
+  removed, which deletes that SCO's values from every attempt.
 - A quiz attempt's `timemodified` changes as the user saves each page of it.
   Only starting, submitting, grading and the other changes listed above are
   recorded.
@@ -748,6 +763,49 @@ combines the attempts by its grading method. Attempts of deleted users stay.
 
 Errors: `module_not_installed` (the H5P activity module has been uninstalled,
 so the site has no H5P activity attempts), `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_scorm_attempts
+
+Users' attempts at SCORM packages, from Moodle's `scorm_attempt` table, each
+with what the package reported for each of its SCOs (its parts) in that
+attempt. Only status, score and start time are read: responses,
+interactions, objectives, suspend data and other tracking data are never
+returned. Attempts at packages in the site course are never returned. A
+state function (see "Paging"): returns `scormattempts` and `next`.
+
+Parameters: `after`, `limit`, `ids` (SCORM attempt ids), as in "Paging", and
+one of two filters: `courseids` or `coursemoduleids`.
+
+Each SCORM attempt:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | SCORM attempt id. |
+| `userid` | int | User id. |
+| `coursemoduleid` | int | The package's course module id (see `local_arcs_get_course_modules`). |
+| `attempt` | int | Attempt number: 1 for the user's first attempt at this package. |
+| `passed` | bool or null | Always null: SCORM reports passing per SCO, in `status` (SCORM 1.2) or `successstatus` (SCORM 2004). The package's grade combines its SCOs by its grading method (see `local_arcs_get_grades`). |
+| `scos` | list | The SCOs the package reported a status, score or start time for in this attempt, by `scoid`. Empty when it has reported none of them. |
+
+Each SCO:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `scoid` | int | SCO id, unique on the site. |
+| `identifier` | string | The SCO's identifier in the package's manifest. |
+| `title` | string | The SCO's title. |
+| `status` | string or null | As the package reported it: `cmi.core.lesson_status` in SCORM 1.2 (`passed`, `completed`, `failed`, `incomplete`, `browsed`, `not attempted`), `cmi.completion_status` in SCORM 2004 (`completed`, `incomplete`, `not attempted`, `unknown`). |
+| `successstatus` | string or null | SCORM 2004's `cmi.success_status` (`passed`, `failed`, `unknown`); null for SCORM 1.2. |
+| `scoreraw` | float or null | The SCO's score (`cmi.core.score.raw`, `cmi.score.raw`). |
+| `scoremin`, `scoremax` | float or null | The score's range, when the package reported it. |
+| `starttime` | int or null | When the SCO was first launched in this attempt. |
+| `timemodified` | int | When any of these values last changed. |
+
+Values are null when the package did not report them. Attempts of deleted
+users stay.
+
+Errors: `module_not_installed` (the SCORM module has been uninstalled, so the
+site has no SCORM attempts), `limit_exceeded`, `invalidparameter`.
 
 ### local_arcs_get_quiz_attempts
 

@@ -145,6 +145,14 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_scorm_attempts' => [
+        'classname' => \local_arcs\external\get_scorm_attempts::class,
+        'description' => 'Returns SCORM attempts with their SCOs\' status and score, by cursor, id, course or course module.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_site_info' => [
         'classname' => \local_arcs\external\get_site_info::class,
         'description' => 'Returns the contract version, plugin and Moodle versions, site identity and log store state.',
@@ -189,6 +197,7 @@ $services = [
             'local_arcs_get_log_events',
             'local_arcs_get_profile_fields',
             'local_arcs_get_quiz_attempts',
+            'local_arcs_get_scorm_attempts',
             'local_arcs_get_site_info',
             'local_arcs_get_user_enrolments',
             'local_arcs_get_users',

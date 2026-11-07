@@ -72,6 +72,12 @@ enum entity: string {
     // An H5P activity attempt (h5pactivity_attempts.id).
     case H5PACTIVITY_ATTEMPT = 'h5pactivity_attempt';
 
+    // A SCORM attempt (scorm_attempt.id).
+    case SCORM_ATTEMPT = 'scorm_attempt';
+
+    // A SCORM package's tracking, named by its course module id. An upsert means: refetch its attempts.
+    case SCORM_TRACKING = 'scorm_tracking';
+
     // A quiz's grading, named by its course module id. An upsert means: refetch the quiz's attempts.
     case QUIZ_GRADING = 'quiz_grading';
 }

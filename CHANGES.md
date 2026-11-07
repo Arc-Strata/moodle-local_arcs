@@ -37,6 +37,8 @@ First release, beta. Contract version 1 (see `docs/contract.md`). Supports Moodl
   grade, and change log entries for quiz attempts and for changes to a quiz's marks.
 - Web service function `local_arcs_get_h5pactivity_attempts`, with each attempt's score,
   completion and success, and change log entries for H5P activity attempts.
+- Web service function `local_arcs_get_scorm_attempts`, with each SCO's status, score and
+  start time, and change log entries for SCORM attempts and for deleted ones.
 - Checks on the system status report saying whether Arcs can connect (web services,
   the REST protocol, the Arcs connector service and a usable token) and read log events,
   with the change log's size, and a link to them from the settings page.

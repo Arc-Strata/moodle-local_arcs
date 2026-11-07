@@ -283,4 +283,19 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'h5pactivity_statement_received'],
         'internal' => false,
     ],
+    [
+        'eventname' => \mod_scorm\event\scoreraw_submitted::class,
+        'callback' => [\local_arcs\observer::class, 'scorm_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_scorm\event\status_submitted::class,
+        'callback' => [\local_arcs\observer::class, 'scorm_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_scorm\event\attempt_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'scorm_attempt_deleted'],
+        'internal' => false,
+    ],
 ];
