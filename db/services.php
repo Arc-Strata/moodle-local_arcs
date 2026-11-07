@@ -105,6 +105,14 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_log_cursor' => [
+        'classname' => \local_arcs\external\get_log_cursor::class,
+        'description' => 'Returns a log event cursor from which no event at or after a given time is missed.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_log_events' => [
         'classname' => \local_arcs\external\get_log_events::class,
         'description' => 'Returns events from the standard log store, after a cursor.',
@@ -160,6 +168,7 @@ $services = [
             'local_arcs_get_courses',
             'local_arcs_get_grade_items',
             'local_arcs_get_grades',
+            'local_arcs_get_log_cursor',
             'local_arcs_get_log_events',
             'local_arcs_get_profile_fields',
             'local_arcs_get_site_info',

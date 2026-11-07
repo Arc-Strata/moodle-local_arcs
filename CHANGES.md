@@ -29,7 +29,8 @@ First release, beta. Contract version 1 (see `docs/contract.md`). Supports Moodl
   and change log entries for cohorts and memberships.
 - Web service function `local_arcs_get_log_events`, which reads the standard log store by
   cursor, withholding the users of anonymous events. Site info reports the log's lowest
-  and highest event ids.
+  and highest event ids, and `local_arcs_get_log_cursor` gives a cursor from which no
+  event at or after a given time is missed.
 - Checks on the system status report saying whether Arcs can connect (web services,
   the REST protocol, the Arcs connector service and a usable token) and read log events,
   with the change log's size, and a link to them from the settings page.

@@ -801,7 +801,8 @@ appeared late.
 
 **Starting.** To read all the history Moodle keeps, start at `after` = 0. To
 read only from now on, start at site info's `logstorenewestid` (0 when the log
-is empty).
+is empty). To read from a point in time, such as the last 90 days, start at
+the `after` that `local_arcs_get_log_cursor` returns for that time.
 
 **When the log store is off.** If Moodle's standard log store is disabled
 (site info's `logstoreenabled` is false), the call fails with
@@ -820,3 +821,31 @@ go a little out of order: read the log much more often than the lifetime.
 
 Errors: `logstore_disabled`, `cursor_expired`, `limit_exceeded`,
 `invalidparameter`.
+
+### local_arcs_get_log_cursor
+
+A cursor for `local_arcs_get_log_events` from which reading misses no event
+that happened at or after a given time.
+
+Parameters:
+
+| Name | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `time` | int | required | Unix time. |
+
+Returns an object:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `after` | int | Pass it as `after` to `local_arcs_get_log_events`. It is just below the lowest event id whose `timecreated` is at or after `time`. When no event is that recent, it is the highest event id (so reading starts with the next event), and 0 when the log is empty. |
+
+Events are not in `timecreated` order by `id` (see "Late events" above), so
+reading from this cursor also returns some events from before `time`: skip
+them by `timecreated` if you want none. A time before the oldest kept event
+gives a cursor just below it.
+
+On a large log the call can take about a second, as it searches the log by
+time; call it once, when you start reading, not on every run.
+
+Errors: `logstore_disabled` (as for `local_arcs_get_log_events`),
+`invalidparameter` (a negative `time`).

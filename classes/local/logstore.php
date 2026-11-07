@@ -72,4 +72,25 @@ class logstore {
             'newest' => $row->newest === null ? null : (int) $row->newest,
         ];
     }
+
+    /**
+     * A cursor from which reading misses no event that happened at or after a given time.
+     *
+     * Ids are not in time order, since the store buffers events before writing them, so the
+     * cursor is just below the lowest id of any event at or after the time, not below the first
+     * event by time. Events between the cursor and the time are read too.
+     *
+     * @param int $time Unix time.
+     * @return int An id to read after; the highest id when no event is that recent, and 0 when the log is empty.
+     */
+    public function cursor_at(int $time): int {
+        $lowest = $this->db->get_field_sql(
+            'SELECT MIN(id) FROM {' . self::TABLE . '} WHERE timecreated >= :time',
+            ['time' => $time]
+        );
+        if ($lowest === null || $lowest === false) {
+            return $this->bounds()['newest'] ?? 0;
+        }
+        return (int) $lowest - 1;
+    }
 }
