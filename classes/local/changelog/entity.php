@@ -39,11 +39,17 @@ enum entity: string {
     // A course category (course_categories.id).
     case COURSE_CATEGORY = 'course_category';
 
-    // A course (course.id). An upsert also means: refetch everything in the course.
+    // A course (course.id).
     case COURSE = 'course';
+
+    // Everything in a course, named by the course id. An upsert means: refetch everything in the course.
+    case COURSE_CONTENTS = 'course_contents';
 
     // A course module (course_modules.id).
     case COURSE_MODULE = 'course_module';
+
+    // An enrolment method instance (enrol.id). An upsert means: refetch the user enrolments through it.
+    case ENROL_INSTANCE = 'enrol_instance';
 
     // A user enrolment (user_enrolments.id).
     case USER_ENROLMENT = 'user_enrolment';

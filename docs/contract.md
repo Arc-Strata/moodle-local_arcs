@@ -84,7 +84,7 @@ Functions that return rows of one kind (the "state functions", such as
   rows paged by `after` and `limit`: `courseids` (rows in those courses),
   `categoryids` (rows in those categories or below them), `coursemoduleids`
   (rows for those course modules), `itemids` (rows for those grade items),
-  `cohortids` (rows for those cohorts) or `userids` (rows for those users). A
+  `enrolids` (rows through those enrolment method instances), `cohortids` (rows for those cohorts) or `userids` (rows for those users). A
   function that takes two filters accepts only one of them per call, except
   `local_arcs_get_cohort_members`, whose `cohortids` and `userids` combine.
   Paging works the same with a filter. A filter and `ids` together are refused
@@ -99,10 +99,12 @@ Functions that return rows of one kind (the "state functions", such as
 2. Read every entity in full with the state functions.
 3. From then on, call `local_arcs_get_changes` with your cursor, fetch the
    current state of each named record through the state functions' `ids`
-   filter, and store the returned `next` as your cursor. Two kinds of change
+   filter, and store the returned `next` as your cursor. Some changes
    also mean "refetch what is under this record", through the filters:
-   - a `course` `upsert` for course C: page every course-scoped function
-     (such as `local_arcs_get_course_modules`) with `courseids` = [C];
+   - a `course_contents` `upsert` for course C: page every course-scoped
+     function (such as `local_arcs_get_course_modules`) with `courseids` = [C];
+   - an `enrol_instance` `upsert` for enrolment method instance E: page
+     `local_arcs_get_user_enrolments` with `enrolids` = [E];
    - a `course_category` `upsert` for category K: page
      `local_arcs_get_categories` and `local_arcs_get_courses` with
      `categoryids` = [K];
@@ -239,8 +241,10 @@ Entities:
 | `cohort` | `cohort.id` | |
 | `cohort_member` | `cohort.id` | The member is `userid`. Membership rows are named by the pair (cohort, user). |
 | `course_category` | `course_categories.id` | |
-| `course` | `course.id` | An `upsert` also means: refetch everything in the course (modules, enrolments, completions, grades). |
+| `course` | `course.id` | The course's own row. An `upsert` implies nothing about what is in the course. |
+| `course_contents` | `course.id` | Everything in the course. There is no `delete`; an `upsert` means: refetch everything in the course (modules, enrolments, completions, grades). |
 | `course_module` | `course_modules.id` | |
+| `enrol_instance` | `enrol.id` | An enrolment method instance in course `courseid`. There is no `delete`; an `upsert` means: refetch the user enrolments through it. |
 | `user_enrolment` | `user_enrolments.id` | |
 | `course_completion` | `course_completions.id` | |
 | `activity_completion` | `course_modules_completion.id` | |
@@ -257,15 +261,17 @@ Which Moodle events record which changes:
 | `\core\event\user_info_field_deleted` | `profile_field` `delete`. |
 | `\core\event\course_category_created`, `course_category_updated` | `course_category` `upsert`. Moving, hiding and showing a category are updates. |
 | `\core\event\course_category_deleted` | `course_category` `delete`. |
-| `\core\event\course_created`, `course_updated` | `course` `upsert`, `courseid` = the course. |
-| `\core\event\course_restored`, `course_reset_ended`, `course_content_deleted` | `course` `upsert`. These write the course's modules, enrolments, completions and grades without changes of their own. |
-| `\core\event\course_completion_updated` (completion criteria saved) | `course` `upsert`. |
+| `\core\event\course_created`, `course_updated` | `course` `upsert`, `courseid` = the course. Nothing in the course is implied. |
+| `\core\event\course_restored` (a whole course restored or imported into it), `course_reset_ended` | `course` `upsert` and `course_contents` `upsert`, `courseid` = the course. Restore can overwrite the course's settings, and reset can move its start and end dates, without a `course_updated`; both write the course's modules, enrolments, completions and grades without changes of their own. |
+| `\core\event\course_content_deleted` | `course_contents` `upsert`. |
+| `\core\event\course_completion_updated` (completion criteria saved) | `course_contents` `upsert`. Unlocking the criteria first deletes the course's completions without changes of their own. |
+| `\tool_recyclebin\event\course_bin_item_restored` | `course_contents` `upsert`. Restoring an activity from the recycle bin brings back the module with its users' completions and grades. Not recorded for the front page. |
 | `\core\event\course_deleted` | `course` `delete`. |
 | `\core\event\course_module_created`, `course_module_updated` | `course_module` `upsert`, `courseid` = its course. Renaming, hiding, showing and changing completion settings are updates. |
 | `\core\event\course_module_deleted` | `course_module` `delete`. |
 | `\core\event\user_enrolment_created`, `user_enrolment_updated` | `user_enrolment` `upsert`, with `userid` and `courseid`. |
 | `\core\event\user_enrolment_deleted` | `user_enrolment` `delete`, with `userid` and `courseid`. |
-| `\core\event\enrol_instance_updated` | `course` `upsert`: an enrolment method's status decides whether every enrolment through it is in effect. |
+| `\core\event\enrol_instance_updated` | `enrol_instance` `upsert`, `courseid` = its course: an enrolment method's status decides whether every enrolment through it is in effect. |
 | `\core\event\role_assigned`, `role_unassigned`, in a course | `user_enrolment` `upsert` for each of the user's enrolments in that course (they carry the user's roles). Nothing for roles in other contexts. |
 | `\core\event\course_completed` | `course_completion` `upsert`, with `userid` and `courseid`. |
 | `\core\event\course_module_completion_updated` | `activity_completion` `upsert`, with `userid` and `courseid`. Viewing an activity is recorded this way when viewing counts towards its completion. |
@@ -308,7 +314,8 @@ a change of their own):
 - A **`cohort_member` delete** means the user is no longer in the cohort:
   remove the membership with that `cohortid` and `userid`.
 - A **`course` delete** means everything in the course is gone: its modules,
-  user enrolments, course and activity completions, grade items and grades.
+  enrolment methods, user enrolments, course and activity completions, grade
+  items and grades.
 - A **`course_module` delete** means its activity completions and grade items
   are gone. Each grade item's own `grade_item` `delete` is recorded too.
 - A **`grade_item` delete** means its grades are gone. Moodle records a `grade`
@@ -319,8 +326,10 @@ a change of their own):
 **Upserts that mean "refetch what is under it"** (Moodle changes those rows
 without changes of their own; see "Keeping in sync", step 3):
 
-- A **`course` upsert**: the course's modules, enrolments, completions and
-  grades.
+- A **`course_contents` upsert**: the course's modules, enrolments,
+  completions and grades. A `course` upsert does not imply this.
+- An **`enrol_instance` upsert**: the user enrolments through it (their
+  `enrolstatus`).
 - A **`course_category` upsert**: the categories below it (hiding, showing and
   moving change their `visible` and `path`) and the courses in it and below it
   (hiding and showing change their `visible`).
@@ -338,6 +347,11 @@ finds:
   and use the site, with no `user` change recorded.
 - Moving a course module to another section changes its `section`, and moving
   it into a hidden section hides it.
+- Restoring a backup of a single activity or section into a course adds its
+  modules, and with user data their completions and grades. (Restoring or
+  importing a whole course is recorded; see above.)
+- Unlocking a course's completion criteria deletes its course completions. A
+  `course_contents` upsert is recorded only when the criteria are then saved.
 - On Moodle 5.3 and later, a course waiting for asynchronous deletion is hidden
   and has `deletioninprogress` set. Its `course` `delete` is recorded when the
   deletion runs.
@@ -531,7 +545,8 @@ method and the user's roles in the course. A state function (see "Paging"):
 returns `userenrolments` and `next`.
 
 Parameters: `after`, `limit`, `ids` (user enrolment ids), as in "Paging", and
-the filter `courseids`.
+one of two filters: `courseids` or `enrolids` (enrolment method instance ids,
+`enrolid` below).
 
 A user can have several enrolments in one course, one per enrolment method.
 An enrolment is in effect when its `status` and `enrolstatus` are both 0 and

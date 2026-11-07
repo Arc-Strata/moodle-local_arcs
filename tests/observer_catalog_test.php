@@ -90,7 +90,7 @@ final class observer_catalog_test extends \advanced_testcase {
     }
 
     /**
-     * Creating and updating a course each record a course upsert.
+     * Creating and updating a course each record a course upsert, and nothing about what is in it.
      */
     public function test_course_created_and_updated(): void {
         $this->clear_changes();
@@ -137,19 +137,30 @@ final class observer_catalog_test extends \advanced_testcase {
     }
 
     /**
-     * Resetting a course records a course upsert.
+     * Resetting a course records a course upsert (reset can move its dates without an event) and a course contents upsert.
      */
     public function test_course_reset(): void {
         $course = $this->getDataGenerator()->create_course();
         $this->clear_changes();
 
-        reset_course_userdata((object) ['id' => $course->id, 'reset_start_date_old' => $course->startdate]);
+        reset_course_userdata((object) [
+            'id' => $course->id,
+            'reset_start_date_old' => $course->startdate,
+            'reset_start_date' => $course->startdate + WEEKSECS,
+            'reset_end_date_old' => 0,
+        ]);
 
-        $this->assertContains($this->change('course', (int) $course->id, 'upsert', null, (int) $course->id), $this->changes());
+        $this->assertSame(
+            [
+                $this->change('course', (int) $course->id, 'upsert', null, (int) $course->id),
+                $this->change('course_contents', (int) $course->id, 'upsert', null, (int) $course->id),
+            ],
+            $this->changes()
+        );
     }
 
     /**
-     * Deleting a course's contents records a course upsert.
+     * Deleting a course's contents records a course contents upsert, and no course upsert.
      */
     public function test_course_content_deleted(): void {
         $course = $this->getDataGenerator()->create_course();
@@ -157,11 +168,13 @@ final class observer_catalog_test extends \advanced_testcase {
 
         remove_course_contents($course->id, false);
 
-        $this->assertContains($this->change('course', (int) $course->id, 'upsert', null, (int) $course->id), $this->changes());
+        $contents = $this->change('course_contents', (int) $course->id, 'upsert', null, (int) $course->id);
+        $this->assertContains($contents, $this->changes());
+        $this->assertNotContains($this->change('course', (int) $course->id, 'upsert', null, (int) $course->id), $this->changes());
     }
 
     /**
-     * Restoring into a course records a course upsert for it.
+     * Restoring into a course records a course upsert and a course contents upsert for it.
      */
     public function test_course_restored(): void {
         global $USER;
@@ -194,11 +207,35 @@ final class observer_catalog_test extends \advanced_testcase {
         $rc->execute_plan();
         $rc->destroy();
 
-        $this->assertContains($this->change('course', (int) $target->id, 'upsert', null, (int) $target->id), $this->changes());
+        $changes = $this->changes();
+        $this->assertContains($this->change('course', (int) $target->id, 'upsert', null, (int) $target->id), $changes);
+        $this->assertContains($this->change('course_contents', (int) $target->id, 'upsert', null, (int) $target->id), $changes);
     }
 
     /**
-     * Saving completion criteria records a course upsert. Core fires this event only from the
+     * Restoring an activity from the recycle bin records a course contents upsert, since the restore
+     * writes the module, its completions and its grades without events of their own.
+     */
+    public function test_recycle_bin_item_restored(): void {
+        $this->setAdminUser();
+        set_config('coursebinenable', 1, 'tool_recyclebin');
+        $course = $this->getDataGenerator()->create_course();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id]);
+        $bin = new \tool_recyclebin\course_bin($course->id);
+        $bin->store_item(get_coursemodule_from_id('page', $page->cmid));
+        $items = $bin->get_items();
+        $this->clear_changes();
+
+        $bin->restore_item(reset($items));
+
+        $this->assertContains(
+            $this->change('course_contents', (int) $course->id, 'upsert', null, (int) $course->id),
+            $this->changes()
+        );
+    }
+
+    /**
+     * Saving completion criteria records a course contents upsert. Core fires this event only from the
      * course completion settings page, so the test fires it as that page does.
      */
     public function test_course_completion_updated(): void {
@@ -208,7 +245,10 @@ final class observer_catalog_test extends \advanced_testcase {
         \core\event\course_completion_updated::create(['courseid' => $course->id,
             'context' => \core\context\course::instance($course->id)])->trigger();
 
-        $this->assertSame([$this->change('course', (int) $course->id, 'upsert', null, (int) $course->id)], $this->changes());
+        $this->assertSame(
+            [$this->change('course_contents', (int) $course->id, 'upsert', null, (int) $course->id)],
+            $this->changes()
+        );
     }
 
     /**

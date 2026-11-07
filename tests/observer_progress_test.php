@@ -142,7 +142,7 @@ final class observer_progress_test extends \advanced_testcase {
     }
 
     /**
-     * Disabling an enrolment method records a course upsert, since every enrolment through it changes effect.
+     * Disabling an enrolment method records an enrolment method upsert, since every enrolment through it changes effect.
      */
     public function test_enrol_instance_updated(): void {
         $this->clear_changes();
@@ -150,7 +150,7 @@ final class observer_progress_test extends \advanced_testcase {
         $this->manual->update_status($this->instance, ENROL_INSTANCE_DISABLED);
 
         $this->assertSame(
-            [$this->change('course', (int) $this->course->id, 'upsert', null, (int) $this->course->id)],
+            [$this->change('enrol_instance', (int) $this->instance->id, 'upsert', null, (int) $this->course->id)],
             $this->changes()
         );
     }

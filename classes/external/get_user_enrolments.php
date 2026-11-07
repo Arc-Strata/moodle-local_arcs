@@ -16,6 +16,7 @@
 
 namespace local_arcs\external;
 
+use core\exception\invalid_parameter_exception;
 use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
@@ -39,6 +40,7 @@ class get_user_enrolments extends state_function {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters(self::paging_parameters() + [
             'courseids' => self::filter_parameter('Return only user enrolments in these courses'),
+            'enrolids' => self::filter_parameter('Return only user enrolments through these enrolment method instances'),
         ]);
     }
 
@@ -49,26 +51,41 @@ class get_user_enrolments extends state_function {
      * @param int $limit Most user enrolments, or ids, to return.
      * @param int[] $ids Return only these user enrolments; after is then ignored.
      * @param int[] $courseids Return only user enrolments in these courses.
+     * @param int[] $enrolids Return only user enrolments through these enrolment method instances.
      * @return array
      */
     public static function execute(
         int $after = 0,
         int $limit = source::DEFAULT_LIMIT,
         array $ids = [],
-        array $courseids = []
+        array $courseids = [],
+        array $enrolids = []
     ): array {
         global $DB;
 
-        ['after' => $after, 'limit' => $limit, 'ids' => $ids, 'courseids' => $courseids] = self::validate_parameters(
-            self::execute_parameters(),
-            ['after' => $after, 'limit' => $limit, 'ids' => $ids, 'courseids' => $courseids]
-        );
+        [
+            'after' => $after,
+            'limit' => $limit,
+            'ids' => $ids,
+            'courseids' => $courseids,
+            'enrolids' => $enrolids,
+        ] = self::validate_parameters(self::execute_parameters(), [
+            'after' => $after,
+            'limit' => $limit,
+            'ids' => $ids,
+            'courseids' => $courseids,
+            'enrolids' => $enrolids,
+        ]);
         $context = \core\context\system::instance();
         self::validate_context($context);
         require_capability('local/arcs:export', $context);
 
+        if ($courseids && $enrolids) {
+            throw new invalid_parameter_exception('courseids and enrolids cannot be combined');
+        }
         $courseids = self::check_filter($ids, $courseids);
-        $page = self::read(new user_enrolments($DB, $courseids), $after, $limit, $ids);
+        $enrolids = self::check_filter($ids, $enrolids);
+        $page = self::read(new user_enrolments($DB, $courseids, $enrolids), $after, $limit, $ids);
         return ['userenrolments' => $page['rows'], 'next' => $page['next']];
     }
 

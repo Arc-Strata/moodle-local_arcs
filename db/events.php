@@ -84,22 +84,27 @@ $observers = [
     ],
     [
         'eventname' => \core\event\course_restored::class,
-        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'callback' => [\local_arcs\observer::class, 'course_rewritten'],
         'internal' => false,
     ],
     [
         'eventname' => \core\event\course_reset_ended::class,
-        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'callback' => [\local_arcs\observer::class, 'course_rewritten'],
         'internal' => false,
     ],
     [
         'eventname' => \core\event\course_content_deleted::class,
-        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'callback' => [\local_arcs\observer::class, 'course_contents_changed'],
         'internal' => false,
     ],
     [
         'eventname' => \core\event\course_completion_updated::class,
-        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'callback' => [\local_arcs\observer::class, 'course_contents_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \tool_recyclebin\event\course_bin_item_restored::class,
+        'callback' => [\local_arcs\observer::class, 'course_contents_changed'],
         'internal' => false,
     ],
     [
@@ -124,7 +129,7 @@ $observers = [
     ],
     [
         'eventname' => \core\event\enrol_instance_updated::class,
-        'callback' => [\local_arcs\observer::class, 'course_upserted'],
+        'callback' => [\local_arcs\observer::class, 'enrol_instance_updated'],
         'internal' => false,
     ],
     [

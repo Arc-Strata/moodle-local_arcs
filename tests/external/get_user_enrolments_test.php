@@ -44,12 +44,19 @@ final class get_user_enrolments_test extends \advanced_testcase {
      * @param int $limit Page size.
      * @param int[] $ids Ids to fetch.
      * @param int[] $courseids Courses whose enrolments to fetch.
+     * @param int[] $enrolids Enrolment method instances whose enrolments to fetch.
      * @return array
      */
-    private function call(int $after = 0, int $limit = source::DEFAULT_LIMIT, array $ids = [], array $courseids = []): array {
+    private function call(
+        int $after = 0,
+        int $limit = source::DEFAULT_LIMIT,
+        array $ids = [],
+        array $courseids = [],
+        array $enrolids = []
+    ): array {
         return external_api::clean_returnvalue(
             get_user_enrolments::execute_returns(),
-            get_user_enrolments::execute($after, $limit, $ids, $courseids)
+            get_user_enrolments::execute($after, $limit, $ids, $courseids, $enrolids)
         );
     }
 
@@ -229,6 +236,58 @@ final class get_user_enrolments_test extends \advanced_testcase {
         $this->assertSame([$this->enrolment_id($two->id, $course->id)], $this->ids($page2));
         $this->assertNull($page2['next']);
         $this->assertSame([], $this->call(0, 10, [], [(int) $empty->id])['userenrolments']);
+    }
+
+    /**
+     * With enrolids, only enrolments through those enrolment method instances are returned, paged by cursor.
+     */
+    public function test_execute_by_enrolment_method(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $one = $generator->create_and_enrol($course, 'student', null, 'manual');
+        $generator->create_and_enrol($course, 'student', null, 'self');
+        $two = $generator->create_and_enrol($course, 'student', null, 'manual');
+        $manual = (int) $DB->get_field('enrol', 'id', ['courseid' => $course->id, 'enrol' => 'manual']);
+
+        $page1 = $this->call(0, 1, [], [], [$manual]);
+        $page2 = $this->call($page1['next'], 1, [], [], [$manual]);
+
+        $this->assertSame([$this->enrolment_id($one->id, $course->id)], $this->ids($page1));
+        $this->assertSame([$this->enrolment_id($two->id, $course->id)], $this->ids($page2));
+        $this->assertNull($page2['next']);
+        $this->assertSame([], $this->call(0, 10, [], [], [-1])['userenrolments']);
+    }
+
+    /**
+     * courseids and enrolids together are refused, as is enrolids with ids.
+     */
+    public function test_execute_course_and_enrolment_method_filters(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+
+        try {
+            get_user_enrolments::execute(0, 10, [], [1], [2]);
+            $this->fail('courseids with enrolids should be refused');
+        } catch (invalid_parameter_exception $e) {
+            $this->assertStringContainsString('cannot be combined', $e->getMessage());
+        }
+        $this->expectException(invalid_parameter_exception::class);
+        get_user_enrolments::execute(0, 10, [1], [], [2]);
+    }
+
+    /**
+     * More enrolids than the maximum are refused with limit_exceeded.
+     */
+    public function test_execute_too_many_enrolment_method_ids(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(get_string('limit_exceeded', 'local_arcs', source::MAX_LIMIT));
+        get_user_enrolments::execute(0, 10, [], [], range(1, source::MAX_LIMIT + 1));
     }
 
     /**

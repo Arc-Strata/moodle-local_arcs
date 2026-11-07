@@ -33,11 +33,14 @@ class user_enrolments extends source {
      *
      * @param \moodle_database $db The database.
      * @param int[] $courseids Only read enrolments in these courses; empty for all.
+     * @param int[] $enrolids Only read enrolments through these enrolment method instances; empty for all.
      */
     public function __construct(
         \moodle_database $db,
         /** @var int[] Only read enrolments in these courses; empty for all. */
         private array $courseids = [],
+        /** @var int[] Only read enrolments through these enrolment method instances; empty for all. */
+        private array $enrolids = [],
     ) {
         parent::__construct($db);
     }
@@ -71,16 +74,24 @@ class user_enrolments extends source {
     }
 
     /**
-     * Only the requested courses' enrolments, when the reader asked for some.
+     * Only the requested courses' or enrolment method instances' enrolments, when the reader asked for some.
      *
      * @return array [string $sql, array $params]
      */
     protected function filter(): array {
-        if (!$this->courseids) {
-            return ['', []];
+        $conditions = [];
+        $params = [];
+        if ($this->courseids) {
+            [$insql, $inparams] = $this->db->get_in_or_equal($this->courseids, SQL_PARAMS_NAMED, 'course');
+            $conditions[] = 'e.courseid ' . $insql;
+            $params += $inparams;
         }
-        [$insql, $params] = $this->db->get_in_or_equal($this->courseids, SQL_PARAMS_NAMED, 'course');
-        return ['e.courseid ' . $insql, $params];
+        if ($this->enrolids) {
+            [$insql, $inparams] = $this->db->get_in_or_equal($this->enrolids, SQL_PARAMS_NAMED, 'enrol');
+            $conditions[] = 'ue.enrolid ' . $insql;
+            $params += $inparams;
+        }
+        return [implode(' AND ', $conditions), $params];
     }
 
     /**

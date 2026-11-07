@@ -89,18 +89,52 @@ class observer {
     }
 
     /**
-     * A course, or what is in it, changed: readers refetch the course and everything in it.
+     * A course's own row was created or changed. Nothing in it is implied.
      *
-     * Restore, reset and content deletion write the course's modules, enrolments, completions
-     * and grades directly, and editing completion criteria changes their meaning, so each of
-     * these is recorded as a course upsert. So is a change to an enrolment method instance,
-     * since its status decides whether every enrolment through it is in effect.
-     *
-     * @param \core\event\base $event course_created, course_updated, course_restored, course_reset_ended,
-     *     course_content_deleted, course_completion_updated or enrol_instance_updated.
+     * @param \core\event\base $event course_created or course_updated.
      */
     public static function course_upserted(\core\event\base $event): void {
         self::recorder()->record(entity::COURSE, $event->courseid, operation::UPSERT, null, $event->courseid);
+    }
+
+    /**
+     * A course was restored into or reset: both its own row and what is in it changed.
+     *
+     * Restore can overwrite the course's settings, and reset can move its start and end dates,
+     * without a course_updated event. Both write the course's modules, enrolments, completions
+     * and grades directly.
+     *
+     * @param \core\event\base $event course_restored or course_reset_ended.
+     */
+    public static function course_rewritten(\core\event\base $event): void {
+        self::recorder()->record(entity::COURSE, $event->courseid, operation::UPSERT, null, $event->courseid);
+        self::recorder()->record(entity::COURSE_CONTENTS, $event->courseid, operation::UPSERT, null, $event->courseid);
+    }
+
+    /**
+     * What is in a course changed without changes of its own: readers refetch everything in the course.
+     *
+     * Content deletion and the recycle bin write the course's modules, completions and grades
+     * directly; saving completion criteria can delete the course's completions first. The front
+     * page's recycle bin is ignored, since its modules are not exported.
+     *
+     * @param \core\event\base $event course_content_deleted, course_completion_updated or
+     *     \tool_recyclebin\event\course_bin_item_restored.
+     */
+    public static function course_contents_changed(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(entity::COURSE_CONTENTS, $event->courseid, operation::UPSERT, null, $event->courseid);
+    }
+
+    /**
+     * An enrolment method instance changed: its status decides whether every enrolment through it is in effect.
+     *
+     * @param \core\event\enrol_instance_updated $event The event.
+     */
+    public static function enrol_instance_updated(\core\event\enrol_instance_updated $event): void {
+        self::recorder()->record(entity::ENROL_INSTANCE, $event->objectid, operation::UPSERT, null, $event->courseid);
     }
 
     /**

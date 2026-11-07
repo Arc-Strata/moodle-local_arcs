@@ -16,11 +16,13 @@ First release, beta. Contract version 1 (see `docs/contract.md`). Supports Moodl
   details are withheld unless an administrator selects them.
 - Web service functions `local_arcs_get_categories`, `local_arcs_get_courses` and
   `local_arcs_get_course_modules`, with `categoryids` and `courseids` filters, and change
-  log entries for categories, courses and course modules.
-- Web service functions `local_arcs_get_user_enrolments` (with roles and their archetypes),
+  log entries for categories, courses, course contents (restore, reset, content deletion,
+  completion criteria and recycle bin restores) and course modules.
+- Web service functions `local_arcs_get_user_enrolments` (with roles and their archetypes,
+  and an `enrolids` filter),
   `local_arcs_get_course_completions` and `local_arcs_get_activity_completions` (with a
-  `coursemoduleids` filter), and change log entries for enrolments, role changes and
-  completions.
+  `coursemoduleids` filter), and change log entries for enrolments, enrolment methods,
+  role changes and completions.
 - Web service functions `local_arcs_get_grade_items` (with course modules and scale
   items) and `local_arcs_get_grades` (with an `itemids` filter), and change log entries
   for grade items and grades.
