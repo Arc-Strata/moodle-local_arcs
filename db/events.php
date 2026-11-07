@@ -259,6 +259,11 @@ $observers = [
         'internal' => false,
     ],
     [
+        'eventname' => \mod_quiz\event\question_manually_graded::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_question_manually_graded'],
+        'internal' => false,
+    ],
+    [
         'eventname' => \mod_quiz\event\attempt_deleted::class,
         'callback' => [\local_arcs\observer::class, 'quiz_attempt_deleted'],
         'internal' => false,

@@ -284,6 +284,7 @@ Which Moodle events record which changes:
 | `\core\event\user_graded` | `grade` `upsert`, with `userid` and `courseid`. Recorded when a user's final grade is set or changes: grading in an activity, overriding in the gradebook, importing, and recalculation. |
 | `\core\event\grade_deleted` | `grade` `delete`, with `userid` and `courseid`. |
 | `\mod_quiz\event\attempt_started`, `attempt_submitted`, `attempt_graded` (Moodle 5.3 and later), `attempt_becameoverdue`, `attempt_abandoned`, `attempt_reopened`, `attempt_regraded`, `attempt_manual_grading_completed` | `quiz_attempt` `upsert`, with `userid` and `courseid`. Not recorded for previews. |
+| `\mod_quiz\event\question_manually_graded` (a teacher graded a question by hand) | `quiz_attempt` `upsert` for the attempt, with `userid` and `courseid`. Not recorded for previews. |
 | `\mod_quiz\event\attempt_deleted` | `quiz_attempt` `delete`, with `userid` and `courseid`. |
 | `\mod_quiz\event\slot_mark_updated` (a question's mark changed), `quiz_grade_updated` (the quiz's maximum grade changed) | `quiz_grading` `upsert`, `entityid` = the quiz's course module, `courseid` = its course. Moodle rewrites every attempt's `sumgrades`, or every attempt's `grade`, without changes of their own. |
 | `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |

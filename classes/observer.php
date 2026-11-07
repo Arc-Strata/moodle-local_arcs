@@ -338,6 +338,33 @@ class observer {
     }
 
     /**
+     * A teacher graded a question in a quiz attempt by hand, changing the attempt's marks.
+     *
+     * The event names the question; the attempt is in other['attemptid'], and is read for its user.
+     * Moodle fires attempt_manual_grading_completed only when it emails the student, so this is
+     * the event that follows every manual grade. Previews and site course quizzes are ignored.
+     *
+     * @param \mod_quiz\event\question_manually_graded $event The event.
+     */
+    public static function quiz_question_manually_graded(\mod_quiz\event\question_manually_graded $event): void {
+        global $DB;
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        $attempt = $DB->get_record('quiz_attempts', ['id' => $event->other['attemptid']], 'id, userid, preview');
+        if (!$attempt || $attempt->preview) {
+            return;
+        }
+        self::recorder()->record(
+            entity::QUIZ_ATTEMPT,
+            (int) $attempt->id,
+            operation::UPSERT,
+            (int) $attempt->userid,
+            $event->courseid
+        );
+    }
+
+    /**
      * A quiz attempt was deleted. Moodle fires this only for attempts that are not previews.
      *
      * @param \mod_quiz\event\attempt_deleted $event The event.

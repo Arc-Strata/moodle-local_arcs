@@ -173,6 +173,45 @@ final class observer_quiz_test extends \advanced_testcase {
     }
 
     /**
+     * Grading an essay by hand records an upsert for the attempt, as comment.php grades and logs it.
+     * Moodle fires attempt_manual_grading_completed only when it emails the student.
+     */
+    public function test_question_manually_graded(): void {
+        $quiz = $this->generator()->create_test_quiz(
+            [['TF1', 1, 'truefalse'], ['Essay', 1, 'essay']],
+            ['course' => $this->course->id, 'preferredbehaviour' => 'deferredfeedback']
+        );
+        $id = (int) quiz_prepare_and_start_new_attempt($quiz, 1, null, false, [], [], $this->user->id)->id;
+        $this->generator()->submit_responses($id, [1 => 'True', 2 => 'An answer'], false, true);
+        $attempt = quiz_attempt::create($id);
+        $qa = $attempt->get_question_attempt(2);
+        $prefix = $qa->get_field_prefix();
+        $this->setAdminUser();
+
+        $this->clear_changes();
+        $attempt->process_submitted_actions(time(), false, [
+            'slots' => '2',
+            $prefix . ':sequencecheck' => $qa->get_sequence_check_count(),
+            $prefix . '-comment' => 'Comment',
+            $prefix . '-comment:itemid' => file_get_unused_draft_itemid(),
+            $prefix . '-commentformat' => FORMAT_HTML,
+            $prefix . '-mark' => 1,
+            $prefix . '-maxmark' => $qa->get_max_mark(),
+            $prefix . '-minfraction' => $qa->get_min_fraction(),
+            $prefix . '-maxfraction' => $qa->get_max_fraction(),
+        ]);
+        \mod_quiz\event\question_manually_graded::create([
+            'objectid' => $qa->get_question_id(),
+            'courseid' => $this->course->id,
+            'context' => $attempt->get_quizobj()->get_context(),
+            'other' => ['quizid' => $quiz->get_quizid(), 'attemptid' => $id, 'slot' => 2],
+        ])->trigger();
+
+        $this->assertEquals(2, quiz_attempt::create($id)->get_sum_marks());
+        $this->assertSame([$this->attempt_change($id, 'upsert')], $this->changes_of('quiz_attempt'));
+    }
+
+    /**
      * Deleting an attempt records a delete.
      */
     public function test_attempt_deleted(): void {
