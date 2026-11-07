@@ -29,31 +29,14 @@ use mod_quiz\grade_calculator;
  * @copyright  2026 David Ells
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class quiz_attempts extends source {
+class quiz_attempts extends attempts {
     /**
-     * Constructor.
+     * The activity module's name.
      *
-     * @param \moodle_database $db The database.
-     * @param int[] $courseids Only read attempts in these courses; empty for all.
-     * @param int[] $coursemoduleids Only read attempts at these course modules; empty for all.
+     * @return string
      */
-    public function __construct(
-        \moodle_database $db,
-        /** @var int[] Only read attempts in these courses; empty for all. */
-        private array $courseids = [],
-        /** @var int[] Only read attempts at these course modules; empty for all. */
-        private array $coursemoduleids = [],
-    ) {
-        parent::__construct($db);
-    }
-
-    /**
-     * Whether the quiz module is installed. When it has been uninstalled, its tables are gone.
-     *
-     * @return bool
-     */
-    public function is_installed(): bool {
-        return $this->db->record_exists('modules', ['name' => 'quiz']);
+    public function modname(): string {
+        return 'quiz';
     }
 
     /**
@@ -88,26 +71,14 @@ class quiz_attempts extends source {
     }
 
     /**
-     * Leaves out previews, attempts not started, and the site course's quizzes, and keeps only the
-     * requested courses' or course modules' attempts when the reader asked for some.
+     * Leaves out previews and attempts not started, on top of the common attempt condition.
      *
      * @return array [string $sql, array $params]
      */
     protected function filter(): array {
-        $sql = 'm.name = :modname AND qa.preview = 0 AND qa.state <> :notstarted AND cm.course <> :siteid';
+        [$sql, $params] = parent::filter();
         // Moodle 4.5 has no notstarted state, so there the condition leaves nothing out.
-        $params = ['modname' => 'quiz', 'notstarted' => 'notstarted', 'siteid' => SITEID];
-        if ($this->courseids) {
-            [$insql, $inparams] = $this->db->get_in_or_equal($this->courseids, SQL_PARAMS_NAMED, 'course');
-            $sql .= ' AND cm.course ' . $insql;
-            $params += $inparams;
-        }
-        if ($this->coursemoduleids) {
-            [$insql, $inparams] = $this->db->get_in_or_equal($this->coursemoduleids, SQL_PARAMS_NAMED, 'cm');
-            $sql .= ' AND cm.id ' . $insql;
-            $params += $inparams;
-        }
-        return [$sql, $params];
+        return [$sql . ' AND qa.preview = 0 AND qa.state <> :notstarted', $params + ['notstarted' => 'notstarted']];
     }
 
     /**

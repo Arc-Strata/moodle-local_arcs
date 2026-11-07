@@ -278,4 +278,9 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'quiz_grading_changed'],
         'internal' => false,
     ],
+    [
+        'eventname' => \mod_h5pactivity\event\statement_received::class,
+        'callback' => [\local_arcs\observer::class, 'h5pactivity_statement_received'],
+        'internal' => false,
+    ],
 ];

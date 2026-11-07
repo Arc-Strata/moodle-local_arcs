@@ -91,7 +91,7 @@ class get_quiz_attempts extends state_function {
         $coursemoduleids = self::check_filter($ids, $coursemoduleids);
         $source = new quiz_attempts($DB, $courseids, $coursemoduleids);
         if (!$source->is_installed()) {
-            throw new moodle_exception('module_not_installed', 'local_arcs', '', 'quiz');
+            throw new moodle_exception('module_not_installed', 'local_arcs', '', $source->modname());
         }
         $page = self::read($source, $after, $limit, $ids);
         return ['quizattempts' => $page['rows'], 'next' => $page['next']];

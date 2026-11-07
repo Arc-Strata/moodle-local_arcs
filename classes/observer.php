@@ -403,6 +403,39 @@ class observer {
     }
 
     /**
+     * An H5P activity received a learner's result. The event names the activity, not the attempt;
+     * the statement has just been saved to the user's latest attempt (a new one for a whole-content
+     * result, the latest for a part of it), so that attempt is recorded. H5P activities on the site
+     * course are ignored.
+     *
+     * @param \mod_h5pactivity\event\statement_received $event The event.
+     */
+    public static function h5pactivity_statement_received(\mod_h5pactivity\event\statement_received $event): void {
+        global $DB;
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        $attempts = $DB->get_records(
+            'h5pactivity_attempts',
+            ['h5pactivityid' => $event->objectid, 'userid' => $event->userid],
+            'attempt DESC',
+            'id',
+            0,
+            1
+        );
+        if (!$attempts) {
+            return;
+        }
+        self::recorder()->record(
+            entity::H5PACTIVITY_ATTEMPT,
+            (int) reset($attempts)->id,
+            operation::UPSERT,
+            $event->userid,
+            $event->courseid
+        );
+    }
+
+    /**
      * A cohort was created or updated.
      *
      * @param \core\event\base $event cohort_created or cohort_updated.

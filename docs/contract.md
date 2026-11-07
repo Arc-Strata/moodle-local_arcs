@@ -253,6 +253,7 @@ Entities:
 | `grade_item` | `grade_items.id` | |
 | `grade` | `grade_grades.id` | |
 | `quiz_attempt` | `quiz_attempts.id` | |
+| `h5pactivity_attempt` | `h5pactivity_attempts.id` | |
 | `quiz_grading` | `course_modules.id` | A quiz's marks and maximum grade. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
 
 Which Moodle events record which changes:
@@ -286,6 +287,7 @@ Which Moodle events record which changes:
 | `\mod_quiz\event\attempt_started`, `attempt_submitted`, `attempt_graded` (Moodle 5.3 and later), `attempt_becameoverdue`, `attempt_abandoned`, `attempt_reopened`, `attempt_regraded`, `attempt_manual_grading_completed` | `quiz_attempt` `upsert`, with `userid` and `courseid`. Not recorded for previews. |
 | `\mod_quiz\event\question_manually_graded` (a teacher graded a question by hand) | `quiz_attempt` `upsert` for the attempt, with `userid` and `courseid`. Not recorded for previews. |
 | `\mod_quiz\event\attempt_deleted` | `quiz_attempt` `delete`, with `userid` and `courseid`. |
+| `\mod_h5pactivity\event\statement_received` (the activity received a learner's result) | `h5pactivity_attempt` `upsert` for the user's latest attempt at the activity, with `userid` and `courseid`. There is no `delete`: Moodle deletes H5P attempts only with their activity, user or course, or in a reset (see the implied deletes). |
 | `\mod_quiz\event\slot_mark_updated` (a question's mark changed), `quiz_grade_updated` (the quiz's maximum grade changed) | `quiz_grading` `upsert`, `entityid` = the quiz's course module, `courseid` = its course. Moodle rewrites every attempt's `sumgrades`, or every attempt's `grade`, without changes of their own. |
 | `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |
 | `\core\event\cohort_deleted` | `cohort` `delete`. |
@@ -377,6 +379,9 @@ finds:
 - A grade is recorded only when its `finalgrade` changes. Changing only a
   grade's `hidden` or `overridden` flag, its feedback, or its `rawgrade` while
   it is overridden or locked, records nothing.
+- When the site's data retention (Privacy and policies) deletes the data of
+  an expired course or activity, H5P activity attempts go without a change
+  of their own.
 - A quiz attempt's `timemodified` changes as the user saves each page of it.
   Only starting, submitting, grading and the other changes listed above are
   recorded.
@@ -708,6 +713,41 @@ Pass or fail is `finalgrade >= gradepass` where the item has a `gradepass`
 above 0. Grades of deleted users are deleted by Moodle.
 
 Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_h5pactivity_attempts
+
+Users' attempts at H5P activities, from Moodle's `h5pactivity_attempts`
+table. The results of each attempt (the user's responses) are never returned.
+Attempts at H5P activities in the site course are never returned. A state
+function (see "Paging"): returns `h5pactivityattempts` and `next`.
+
+Parameters: `after`, `limit`, `ids` (H5P activity attempt ids), as in
+"Paging", and one of two filters: `courseids` or `coursemoduleids`.
+
+Each H5P activity attempt:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | H5P activity attempt id. |
+| `userid` | int | User id. |
+| `coursemoduleid` | int | The H5P activity's course module id (see `local_arcs_get_course_modules`). |
+| `attempt` | int | Attempt number: 1 for the user's first attempt at this activity. |
+| `rawscore` | int or null | The score the content reported. |
+| `maxscore` | int or null | The highest score possible. |
+| `scaled` | float | The score scaled from 0 to 1. |
+| `duration` | int or null | Seconds spent, as the content reported it. |
+| `completion` | bool or null | Whether the content reported the attempt complete; null when it did not say. |
+| `success` | bool or null | Whether the content reported the attempt successful; null when it did not say. |
+| `timecreated` | int | When the attempt was started. |
+| `timemodified` | int | When the attempt last changed. |
+| `passed` | bool or null | Whether the attempt passed: `success`, since the H5P content decides it. Null when the content does not; then compare with the activity's grade item's `gradepass` (see `local_arcs_get_grade_items`). |
+
+An attempt is recorded only while the activity tracks attempts (its
+"Enable attempt tracking" setting). The activity's grade in the gradebook
+combines the attempts by its grading method. Attempts of deleted users stay.
+
+Errors: `module_not_installed` (the H5P activity module has been uninstalled,
+so the site has no H5P activity attempts), `limit_exceeded`, `invalidparameter`.
 
 ### local_arcs_get_quiz_attempts
 

@@ -85,6 +85,7 @@ class provider implements
         'cohortmembers',
         'logevents',
         'quizattempts',
+        'h5pactivityattempts',
     ];
 
     /**

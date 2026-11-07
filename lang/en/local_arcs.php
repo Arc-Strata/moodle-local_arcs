@@ -69,6 +69,7 @@ $string['privacy:metadata:arcs:firstaccess'] = 'When the user first accessed the
 $string['privacy:metadata:arcs:firstname'] = 'The user\'s first name.';
 $string['privacy:metadata:arcs:firstnamephonetic'] = 'The phonetic spelling of the user\'s first name (optional).';
 $string['privacy:metadata:arcs:grades'] = 'The user\'s grades: each grade item\'s final and raw grade, whether the grade is hidden or overridden, and when the user was graded. Feedback is not sent.';
+$string['privacy:metadata:arcs:h5pactivityattempts'] = 'The user\'s H5P activity attempts: each attempt\'s number, score, duration, completion and success, and when it was made. Their answers are not sent.';
 $string['privacy:metadata:arcs:idnumber'] = 'The user\'s ID number.';
 $string['privacy:metadata:arcs:institution'] = 'The user\'s institution (optional).';
 $string['privacy:metadata:arcs:lang'] = 'The user\'s preferred language.';

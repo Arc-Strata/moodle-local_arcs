@@ -69,6 +69,9 @@ enum entity: string {
     // A quiz attempt (quiz_attempts.id).
     case QUIZ_ATTEMPT = 'quiz_attempt';
 
+    // An H5P activity attempt (h5pactivity_attempts.id).
+    case H5PACTIVITY_ATTEMPT = 'h5pactivity_attempt';
+
     // A quiz's grading, named by its course module id. An upsert means: refetch the quiz's attempts.
     case QUIZ_GRADING = 'quiz_grading';
 }

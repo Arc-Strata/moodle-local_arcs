@@ -35,6 +35,8 @@ First release, beta. Contract version 1 (see `docs/contract.md`). Supports Moodl
   event at or after a given time is missed.
 - Web service function `local_arcs_get_quiz_attempts`, with each attempt's marks and
   grade, and change log entries for quiz attempts and for changes to a quiz's marks.
+- Web service function `local_arcs_get_h5pactivity_attempts`, with each attempt's score,
+  completion and success, and change log entries for H5P activity attempts.
 - Checks on the system status report saying whether Arcs can connect (web services,
   the REST protocol, the Arcs connector service and a usable token) and read log events,
   with the change log's size, and a link to them from the settings page.
