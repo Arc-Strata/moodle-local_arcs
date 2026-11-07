@@ -53,7 +53,9 @@ These apply to every function unless its section says otherwise.
 - **Booleans** are returned as JSON `true` or `false`.
 - **Errors** are Moodle exceptions. In the REST JSON format they arrive as an
   object with `exception`, `errorcode` and `message`. The `errorcode` values
-  listed in this document are stable; messages are not.
+  listed in this document are stable; messages are not. When the site has
+  debugging turned on, Moodle adds `debuginfo` (and may add other keys); readers
+  ignore them.
 
 ### Paging (state functions)
 
@@ -112,8 +114,12 @@ Functions that return rows of one kind (the "state functions", such as
 
    Cohort memberships are named by cohort and user, not by id (see
    `local_arcs_get_cohort_members`).
-4. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
-5. Also repeat step 2 from time to time (a full reconciliation). The change log
+4. On every sync, compare site info's `optionalfields` with the list you saw
+   last time. If it differs, refetch every user with `local_arcs_get_users`:
+   changing that setting changes every user's exported fields, and records no
+   change.
+5. If `local_arcs_get_changes` reports `cursor_expired`, go back to step 1.
+6. Also repeat step 2 from time to time (a full reconciliation). The change log
    is a hint: some Moodle code paths change data without telling anyone, and
    the state functions are always the truth.
 
@@ -127,8 +133,14 @@ is off, only the log stream stops; everything above still works.
 - `contractversion` changes only when something is removed or changes
   meaning: a function, a field, a parameter, an error code, or a rule in this
   document. Such a change is listed in the plugin's `CHANGES.md`.
-- Adding a function, an optional parameter or a field does not change it.
-  Readers must ignore fields they don't know.
+- Additions do not change it. These are additions:
+  - a new function;
+  - a new optional parameter;
+  - a new field;
+  - a new `entity` value in the change log (see `local_arcs_get_changes`);
+  - a new error code that only a new function or a new parameter can raise.
+- Readers must ignore fields they don't know, and skip change-log rows whose
+  `entity` they don't know.
 - A reader should refuse to sync from a site whose `contractversion` it does
   not know.
 
@@ -152,6 +164,8 @@ Returns an object:
 | `moodlebranch` | string | Moodle's branch, such as `405` or `503`. |
 | `siteidentifier` | string | Moodle's site identifier. Stable for the life of the site; use it to tell sites apart. |
 | `wwwroot` | string | The site's URL. |
+| `sitefullname` | string | The site's full name, raw: the front page's full name, which may hold multi-language markup. |
+| `defaultlang` | string | The site's default language code, such as `en` or `pt_br`. Use it to resolve multi-language names. |
 | `timezone` | string | The site's default timezone (an IANA name, such as `Europe/London`). |
 | `logstoreenabled` | bool | Whether Moodle's standard log store is enabled, so that new events are recorded. |
 | `logstorelifetime` | int | Days the standard log store keeps rows before Moodle deletes them; 0 means forever. |
@@ -162,7 +176,7 @@ Returns an object:
 | `changeloghighwatermark` | int | Highest change id a reader may read up to now (see `local_arcs_get_changes`). A new reader starts here. |
 | `changelogpurgedupto` | int | Every change up to this id has been deleted for age; a cursor below it is expired. 0 when nothing has been deleted. |
 | `changelogretentiondays` | int | Days the change log keeps rows. Read changes more often than this. |
-| `optionalfields` | list of strings | The optional user fields this site exports (see `local_arcs_get_users`): user field names, such as `department`, and `profile_field_` followed by a custom profile field's shortname. Optional fields not listed are withheld. |
+| `optionalfields` | list of strings | The optional user fields this site exports (see `local_arcs_get_users`): user field names, such as `department`, and `profile_field_` followed by a custom profile field's shortname. Optional fields not listed are withheld. Changing the choice records no change: when this list differs from the one you saw last, refetch every user. |
 
 Errors: none beyond the access errors above.
 
@@ -536,12 +550,18 @@ Each user enrolment:
 | `status` | int | The enrolment's status: 0 active, 1 suspended. |
 | `timestart`, `timeend` | int | When the enrolment starts and ends; 0 if not limited. |
 | `timecreated`, `timemodified` | int | When the enrolment was created and last changed. |
-| `roles` | list | The user's roles in the course: `roleid` and `shortname` (such as `student`, `editingteacher`), each listed once, in Moodle's role order. |
+| `roles` | list | The user's roles in the course: `roleid`, `shortname` (such as `student`, `editingteacher`) and `archetype`, each listed once, in Moodle's role order. |
 
 **Roles** are those assigned to the user directly in the course, by hand or by
 an enrolment method. Roles assigned in a category or site-wide, and roles held
 without an enrolment, are not included. Key roles by `roleid`: a role's
 `shortname` can be renamed.
+
+A role's `archetype` is the standard role it was made from: `student`,
+`teacher`, `editingteacher`, `manager`, `coursecreator`, `guest`, `user` or
+`frontpage`. It is empty for a role made with none. The archetype says what
+kind of role a custom role is, such as a site's own learner role made from
+`student`. It can change only when an administrator edits the role.
 
 Errors: `limit_exceeded`, `invalidparameter`.
 

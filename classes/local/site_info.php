@@ -32,6 +32,7 @@ class site_info {
      * Constructor.
      *
      * @param \stdClass $cfg The site configuration ($CFG).
+     * @param \stdClass $site The site course (get_site()).
      * @param logstore $logstore The standard log store's state.
      * @param reader $changes The change log reader.
      * @param retention $retention The change log's retention state.
@@ -40,6 +41,8 @@ class site_info {
     public function __construct(
         /** @var \stdClass The site configuration ($CFG). */
         private \stdClass $cfg,
+        /** @var \stdClass The site course (get_site()). */
+        private \stdClass $site,
         /** @var logstore The standard log store's state. */
         private logstore $logstore,
         /** @var reader The change log reader. */
@@ -69,6 +72,8 @@ class site_info {
             'moodlebranch' => (string) $this->cfg->branch,
             'siteidentifier' => get_site_identifier(),
             'wwwroot' => (string) $this->cfg->wwwroot,
+            'sitefullname' => (string) $this->site->fullname,
+            'defaultlang' => (string) $this->cfg->lang,
             'timezone' => \core_date::get_server_timezone(),
             'logstoreenabled' => $this->logstore->is_enabled(),
             'logstorelifetime' => $this->logstore->lifetime_days(),

@@ -118,8 +118,8 @@ final class get_user_enrolments_test extends \advanced_testcase {
             'timecreated' => (int) $ue->timecreated,
             'timemodified' => (int) $ue->timemodified,
             'roles' => [
-                ['roleid' => (int) $roles['teacher'], 'shortname' => 'teacher'],
-                ['roleid' => (int) $roles['student'], 'shortname' => 'student'],
+                ['roleid' => (int) $roles['teacher'], 'shortname' => 'teacher', 'archetype' => 'teacher'],
+                ['roleid' => (int) $roles['student'], 'shortname' => 'student', 'archetype' => 'student'],
             ],
         ]], $this->call()['userenrolments']);
     }
@@ -137,7 +137,29 @@ final class get_user_enrolments_test extends \advanced_testcase {
         $studentid = (int) $DB->get_field('role', 'id', ['shortname' => 'student']);
         role_assign($studentid, $user->id, \core\context\course::instance($course->id)->id, 'enrol_self', 1);
 
-        $this->assertSame([['roleid' => $studentid, 'shortname' => 'student']], $this->call()['userenrolments'][0]['roles']);
+        $this->assertSame(
+            [['roleid' => $studentid, 'shortname' => 'student', 'archetype' => 'student']],
+            $this->call()['userenrolments'][0]['roles']
+        );
+    }
+
+    /**
+     * A custom role carries the archetype it was made from, and an empty string when it has none.
+     */
+    public function test_execute_returns_role_archetypes(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+        $learnerid = create_role('Apprentice', 'apprentice', '', 'student');
+        $observerid = create_role('Observer', 'observer', '');
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, $learnerid);
+        role_assign($observerid, $user->id, \core\context\course::instance($course->id)->id);
+
+        $this->assertSame([
+            ['roleid' => $learnerid, 'shortname' => 'apprentice', 'archetype' => 'student'],
+            ['roleid' => $observerid, 'shortname' => 'observer', 'archetype' => ''],
+        ], $this->call()['userenrolments'][0]['roles']);
     }
 
     /**

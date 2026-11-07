@@ -94,6 +94,7 @@ class get_user_enrolments extends state_function {
                 new external_single_structure([
                     'roleid' => new external_value(PARAM_INT, 'Role id'),
                     'shortname' => new external_value(PARAM_RAW, 'Role shortname, such as student or editingteacher'),
+                    'archetype' => new external_value(PARAM_ALPHANUMEXT, "The role's archetype, such as student; empty if none"),
                 ]),
                 "The user's roles assigned directly in the course"
             ),

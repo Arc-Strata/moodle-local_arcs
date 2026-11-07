@@ -67,6 +67,8 @@ final class get_site_info_test extends \advanced_testcase {
         $this->assertSame((string) $CFG->branch, $result['moodlebranch']);
         $this->assertSame(get_site_identifier(), $result['siteidentifier']);
         $this->assertSame($CFG->wwwroot, $result['wwwroot']);
+        $this->assertSame(get_site()->fullname, $result['sitefullname']);
+        $this->assertSame($CFG->lang, $result['defaultlang']);
         $this->assertSame(\core_date::get_server_timezone(), $result['timezone']);
         $this->assertNull($result['changelogoldestid']);
         $this->assertNull($result['changelognewestid']);
@@ -113,6 +115,24 @@ final class get_site_info_test extends \advanced_testcase {
         $this->assertSame($first, $result['changeloghighwatermark']);
         $this->assertSame($first - 1, $result['changelogpurgedupto']);
         $this->assertSame(7, $result['changelogretentiondays']);
+    }
+
+    /**
+     * The site's full name is reported raw, multi-language markup included, with the site's default language.
+     */
+    public function test_execute_reports_site_name_and_language(): void {
+        global $DB, $SITE;
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $name = '<span lang="en" class="multilang">Acme Academy</span><span lang="fr" class="multilang">Académie Acme</span>';
+        $DB->set_field('course', 'fullname', $name, ['id' => SITEID]);
+        $SITE = $DB->get_record('course', ['id' => SITEID]);
+        set_config('lang', 'fr');
+
+        $result = $this->call();
+
+        $this->assertSame($name, $result['sitefullname']);
+        $this->assertSame('fr', $result['defaultlang']);
     }
 
     /**

@@ -59,7 +59,14 @@ class get_site_info extends external_api {
 
         $clock = \core\di::get(\core\clock::class);
         $retention = new retention($DB, $clock);
-        $info = new site_info($CFG, new logstore($DB), new reader($DB, $clock, $retention), $retention, new settings());
+        $info = new site_info(
+            $CFG,
+            get_site(),
+            new logstore($DB),
+            new reader($DB, $clock, $retention),
+            $retention,
+            new settings()
+        );
         return $info->export();
     }
 
@@ -77,6 +84,8 @@ class get_site_info extends external_api {
             'moodlebranch' => new external_value(PARAM_ALPHANUM, 'Moodle branch, such as 405 or 503'),
             'siteidentifier' => new external_value(PARAM_RAW, 'Moodle site identifier, stable for the life of the site'),
             'wwwroot' => new external_value(PARAM_URL, 'Site URL'),
+            'sitefullname' => new external_value(PARAM_RAW, 'Site full name, raw (the site course fullname)'),
+            'defaultlang' => new external_value(PARAM_ALPHANUMEXT, 'Site default language code, such as en or pt_br'),
             'timezone' => new external_value(PARAM_TIMEZONE, 'Site default timezone; all timestamps are Unix seconds'),
             'logstoreenabled' => new external_value(PARAM_BOOL, 'Whether the standard log store is enabled'),
             'logstorelifetime' => new external_value(PARAM_INT, 'Days the standard log store keeps rows; 0 means forever'),

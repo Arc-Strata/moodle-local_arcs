@@ -116,7 +116,7 @@ class user_enrolments extends source {
      * Reads the roles of a page's users in the page's courses, in one query.
      *
      * @param \stdClass[] $records The user enrolments.
-     * @return array[] Roles (roleid, shortname), keyed by course id, user id and role id, in role order.
+     * @return array[] Roles (roleid, shortname, archetype), keyed by course id, user id and role id, in role order.
      */
     private function roles(array $records): array {
         if (!$records) {
@@ -133,7 +133,7 @@ class user_enrolments extends source {
             SQL_PARAMS_NAMED,
             'user'
         );
-        $sql = "SELECT ra.id, ctx.instanceid AS courseid, ra.userid, r.id AS roleid, r.shortname
+        $sql = "SELECT ra.id, ctx.instanceid AS courseid, ra.userid, r.id AS roleid, r.shortname, r.archetype
                   FROM {role_assignments} ra
                   JOIN {context} ctx ON ctx.id = ra.contextid AND ctx.contextlevel = :courselevel
                   JOIN {role} r ON r.id = ra.roleid
@@ -149,6 +149,7 @@ class user_enrolments extends source {
             $roles[$record->courseid][$record->userid][$record->roleid] = [
                 'roleid' => (int) $record->roleid,
                 'shortname' => $record->shortname,
+                'archetype' => (string) $record->archetype,
             ];
         }
         $rs->close();
