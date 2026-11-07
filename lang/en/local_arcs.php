@@ -23,6 +23,26 @@
  */
 
 $string['arcs:export'] = 'Export site data to Arcs';
+$string['checkchangelog'] = 'Arcs change log';
+$string['checkchangelog_empty'] = 'The change log is empty. Changes are kept for {$a} days.';
+$string['checkchangelog_info'] = 'The change log holds {$a->changes} changes; the oldest was recorded on {$a->oldest}. Changes are kept for {$a->days} days.';
+$string['checklogstore'] = 'Arcs log events';
+$string['checklogstore_ok'] = 'The standard log store is enabled, so Arcs can read log events.';
+$string['checklogstore_warning'] = 'The standard log store is disabled, so Arcs cannot read log events. Everything else Arcs reads still works.';
+$string['checkrestprotocol'] = 'Arcs REST protocol';
+$string['checkrestprotocol_error'] = 'The REST protocol is disabled. Arcs connects through it.';
+$string['checkrestprotocol_ok'] = 'The REST protocol is enabled.';
+$string['checkservice'] = 'Arcs connector service';
+$string['checkservice_error'] = 'The Arcs connector service is disabled.';
+$string['checkservice_ok'] = 'The Arcs connector service is enabled.';
+$string['checktoken'] = 'Arcs token';
+$string['checktoken_details'] = 'A token can be used by Arcs when it has not expired, and its user is not suspended, is an authorised user of the Arcs connector service, and has the capabilities local/arcs:export and webservice/rest:use at system level.';
+$string['checktoken_none'] = 'There is no token for the Arcs connector service.';
+$string['checktoken_ok'] = 'Tokens Arcs can use: {$a}.';
+$string['checktoken_unusable'] = 'None of the tokens for the Arcs connector service can be used ({$a} found).';
+$string['checkwebservices'] = 'Arcs web services';
+$string['checkwebservices_error'] = 'Web services are disabled, so Arcs cannot connect.';
+$string['checkwebservices_ok'] = 'Web services are enabled.';
 $string['cursor_expired'] = 'The cursor is older than the oldest row kept, so rows after it have been deleted. See the web service contract for how to start again.';
 $string['limit_exceeded'] = 'The limit, or the number of ids, is above the maximum of {$a}.';
 $string['logstore_disabled'] = 'The standard log store is not enabled, so log events are not being recorded.';
@@ -75,4 +95,5 @@ $string['privacy:metadata:local_arcs_change:timecreated'] = 'When the change was
 $string['privacy:metadata:local_arcs_change:userid'] = 'The user the changed record belongs to.';
 $string['retentiondays'] = 'Change log retention';
 $string['retentiondays_desc'] = 'How long to keep change log entries. Arcs must read the change log more often than this; if it falls further behind, it has to read every entity again.';
+$string['settingsintro'] = 'Arcs reads this site through the Arcs connector web service. The <a href="{$a}">system status report</a> shows whether everything Arcs needs is set up.';
 $string['task_cleanup_changes'] = 'Delete old change log entries';

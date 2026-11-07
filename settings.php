@@ -31,6 +31,12 @@ if ($hassiteconfig) {
     $ADMIN->add('localplugins', $settings);
 
     if ($ADMIN->fulltree) {
+        $settings->add(new admin_setting_heading(
+            'local_arcs/intro',
+            '',
+            new \core\lang_string('settingsintro', 'local_arcs', (new \core\url('/report/status/index.php'))->out())
+        ));
+
         $choices = [];
         foreach (settings::RETENTION_DAYS_CHOICES as $days) {
             $choices[$days] = new \core\lang_string('numdays', 'core', $days);

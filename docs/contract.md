@@ -312,6 +312,8 @@ without changes of their own; see "Keeping in sync", step 3):
 **Changes Moodle makes without any event**, which only a full reconciliation
 finds:
 
+- A user's `firstaccess`, `lastaccess` and `lastlogin` change as they log in
+  and use the site, with no `user` change recorded.
 - Moving a course module to another section changes its `section`, and moving
   it into a hidden section hides it.
 - On Moodle 5.3 and later, a course waiting for asynchronous deletion is hidden

@@ -29,3 +29,6 @@ contract version and are listed here.
 - Web service function `local_arcs_get_log_events`, which reads the standard log store by
   cursor, withholding the users of anonymous events. Site info reports the log's lowest
   and highest event ids.
+- Checks on the system status report saying whether Arcs can connect (web services,
+  the REST protocol, the Arcs connector service and a usable token) and read log events,
+  with the change log's size, and a link to them from the settings page.
