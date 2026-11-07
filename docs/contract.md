@@ -116,6 +116,8 @@ Functions that return rows of one kind (the "state functions", such as
      `local_arcs_get_quiz_attempts` with `coursemoduleids` = [M];
    - a `scorm_tracking` `upsert` for course module M: page
      `local_arcs_get_scorm_attempts` with `coursemoduleids` = [M];
+   - an `assign_grading` `upsert` for course module M: page
+     `local_arcs_get_assign_submissions` with `coursemoduleids` = [M];
    - a `course_category` `delete`: page `local_arcs_get_cohorts` in full.
 
    Cohort memberships are named by cohort and user, not by id (see
@@ -259,6 +261,8 @@ Entities:
 | `scorm_attempt` | `scorm_attempt.id` | |
 | `scorm_tracking` | `course_modules.id` | A SCORM package's attempts. There is no `delete`; an `upsert` means: refetch the package's attempts. |
 | `quiz_grading` | `course_modules.id` | A quiz's marks and maximum grade. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
+| `assign_submission` | `assign_submission.id` | |
+| `assign_grading` | `course_modules.id` | An assignment's submissions and grades. There is no `delete`; an `upsert` means: refetch the assignment's submissions. |
 
 Which Moodle events record which changes:
 
@@ -294,6 +298,11 @@ Which Moodle events record which changes:
 | `\mod_h5pactivity\event\statement_received` (the activity received a learner's result) | `h5pactivity_attempt` `upsert` for the user's latest attempt at the activity, with `userid` and `courseid`. There is no `delete`: Moodle deletes H5P attempts only with their activity, user or course, or in a reset (see the implied deletes). |
 | `\mod_scorm\event\scoreraw_submitted`, `status_submitted` (a package reported a score, or a `completed`, `passed` or `failed` status) | `scorm_attempt` `upsert`, with `userid` and `courseid`. |
 | `\mod_scorm\event\attempt_deleted` | `scorm_tracking` `upsert`, `entityid` = the package's course module, `courseid` = its course. Moodle names a deleted attempt by its number, not its id, so the package's attempts are refetched; attempts not returned are gone. |
+| `\mod_assign\event\submission_created`, `submission_updated` (and the submission plugins' events that extend them: a submission was saved), `assessable_submitted`, `submission_status_updated` (reverted to draft, or emptied), `submission_duplicated` (the previous attempt was copied), `submission_removed` | `assign_submission` `upsert`, with `userid` and `courseid`. In a team submission the event names the group's submission, which is not exported, and Moodle changes members' own submissions without naming them: `assign_grading` `upsert` instead. |
+| `\mod_assign\event\submission_graded`, and on Moodle 5.3 and later `submission_marked` (one of several markers marked it) | `assign_submission` `upsert` for the user's submission for the graded attempt, with `userid` and `courseid`. Nothing when a team member has no submission of their own. |
+| `\mod_assign\event\workflow_state_updated` (a user's marking workflow state changed) | `assign_submission` `upsert` for each of the user's submissions at the assignment, with `userid` and `courseid`: the state decides whether their grades are released. |
+| `\mod_assign\event\identities_revealed` (blind marking ended) | `assign_grading` `upsert`, `entityid` = the assignment's course module, `courseid` = its course. Every grade is released at once, without changes of their own. |
+| `\core\event\course_module_updated`, for an assignment | `assign_grading` `upsert`, as well as the `course_module` `upsert`. Saving an assignment's settings can rescale its grades, change its maximum grade or scale, and turn the marking workflow or anonymous marking on or off, changing every submission's grade without changes of their own. |
 | `\mod_quiz\event\slot_mark_updated` (a question's mark changed), `quiz_grade_updated` (the quiz's maximum grade changed) | `quiz_grading` `upsert`, `entityid` = the quiz's course module, `courseid` = its course. Moodle rewrites every attempt's `sumgrades`, or every attempt's `grade`, without changes of their own. |
 | `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |
 | `\core\event\cohort_deleted` | `cohort` `delete`. |
@@ -319,7 +328,7 @@ a change of their own):
 
 - A **`user` delete** means the user is deleted: Moodle keeps a scrubbed user
   row with `deleted` true (see `local_arcs_get_users`). Treat the user's
-  enrolments, completions, grades, attempts and cohort memberships as gone, and erase
+  enrolments, completions, grades, attempts (assignment submissions included) and cohort memberships as gone, and erase
   the person downstream.
 - A **`profile_field` delete** means every user's value for that field is gone.
 - A **`course_category` delete** comes with a delete, or an update for a move,
@@ -357,6 +366,10 @@ without changes of their own; see "Keeping in sync", step 3):
   unlocking an item also set the `hidden` and locked state of its grades.
 - A **`scorm_tracking` upsert**: the package's attempts. An attempt was
   deleted; it is the one no longer returned.
+- An **`assign_grading` upsert**: the assignment's submissions. Revealing
+  identities releases every grade; saving the assignment's settings can change
+  every grade and its range, or whether grades are released; and in a team
+  submission, one member's action changes other members' submissions.
 - A **`quiz_grading` upsert**: the quiz's attempts. Changing a question's mark
   rewrites every finished attempt's `sumgrades` and `timemodified`, and the
   quiz's `maxsumgrades`; changing the quiz's maximum grade changes every
@@ -388,8 +401,16 @@ finds:
   grade's `hidden` or `overridden` flag, its feedback, or its `rawgrade` while
   it is overridden or locked, records nothing.
 - When the site's data retention (Privacy and policies) deletes the data of
-  an expired course or activity, H5P activity and SCORM attempts go without a
-  change of their own.
+  an expired course or activity, H5P activity and SCORM attempts and
+  assignment submissions go without a change of their own.
+- Allowing another attempt at an assignment, by hand or automatically when a
+  grade is saved, adds the new attempt's submission (`reopened`) without a
+  change. It is recorded when the user first saves in it.
+- Grading an earlier attempt than the user's latest, and grading while the
+  assignment's grade is locked or overridden in the gradebook, record
+  nothing. So does a user starting an assignment with a time limit
+  (`timestarted`), and recalculating late penalties from the gradebook's
+  penalty page (Moodle 5.0 and later).
 - A SCORM attempt is recorded only when the package reports a score, or a
   `completed`, `passed` or `failed` status. An attempt whose SCOs have only
   reported `incomplete`, `browsed` or `not attempted`, and a change only to
@@ -842,6 +863,61 @@ method (highest, average, first or last attempt); it is the quiz's grade in
 
 Errors: `module_not_installed` (the quiz module has been uninstalled, so the
 site has no quiz attempts), `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_assign_submissions
+
+Users' submissions to assignments, from Moodle's `assign_submission` table,
+one per attempt, each with the grade for that attempt from `assign_grades`.
+What was submitted (text, files) and feedback are never returned.
+Submissions to assignments in the site course are never returned. A state
+function (see "Paging"): returns `assignsubmissions` and `next`.
+
+Parameters: `after`, `limit`, `ids` (assignment submission ids), as in
+"Paging", and one of two filters: `courseids` or `coursemoduleids`.
+
+Each assignment submission:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Assignment submission id. |
+| `userid` | int | User id. |
+| `coursemoduleid` | int | The assignment's course module id (see `local_arcs_get_course_modules`). |
+| `attempt` | int | Attempt number: 1 for the user's first attempt at this assignment. The user's latest attempt is the one with the highest number. |
+| `status` | string or null | `new` (nothing submitted yet), `draft` (saved, not yet submitted for grading), `submitted`, or `reopened` (a new attempt was allowed, nothing submitted in it yet). |
+| `timecreated` | int | When the submission was created. |
+| `timemodified` | int | When the submission last changed. |
+| `timestarted` | int or null | When the user started it, in an assignment with a time limit; null otherwise. |
+| `grade` | float or null | The grade for this attempt: points, or with a scale the position on the scale (1 for its first item; see `local_arcs_get_grade_items` for the scale's items). Before any late penalty. Null until the attempt is graded, when it was graded "No grade", when the assignment is not graded, and while the grade is withheld (see below). |
+| `grademax` | float or null | The assignment's maximum points; null when it is graded on a scale or not graded. |
+| `scaleid` | int or null | The scale the assignment is graded on; null when it is graded in points or not graded. |
+| `penalty` | float or null | On Moodle 5.0 and later, the percentage deducted from `grade` for lateness (0 for none); the gradebook holds the grade after it. Null when `grade` is null, and before Moodle 5.0. |
+| `timegraded` | int or null | When the grade last changed; null when `grade` is null. |
+| `passed` | bool or null | Always null: an assignment does not decide passing. Compare `grade` with the assignment's grade item's `gradepass` (see `local_arcs_get_grade_items`). |
+
+**Withheld grades.** A grade is returned only once Moodle would release it to
+the gradebook, so that nothing is sent that the user's teachers have not
+released: not while blind marking hides the students' identities (unless the
+assignment uses anonymous marking), and, under a marking workflow, not until
+the user's workflow state is `released`. The workflow state applies to all
+of a user's attempts. While a grade is withheld, `grade`, `penalty` and
+`timegraded` are null; releasing it records a change (see
+`local_arcs_get_changes`).
+
+**Team submissions.** In an assignment where students submit in groups, the
+group's own submission is not returned, since groups are not exported. Each
+member's own submission is: Moodle writes it when that member saves or
+submits, when a teammate saves (unless every member must submit), and when
+the group's attempt is reopened or emptied, so its `status` is what the
+member last did or saw, and can lag the group's (a member's draft stays
+`draft` after a teammate submits). A member who has done none of these has
+no submission, and their grade is only in `local_arcs_get_grades`.
+
+The assignment's grade in the gradebook is the user's latest attempt's,
+after any late penalty. Submissions of deleted users stay.
+
+Errors: `module_not_installed` (the assignment module has been uninstalled,
+so the site has no assignment submissions), `limit_exceeded`,
+`invalidparameter`.
 
 ### local_arcs_get_cohorts
 

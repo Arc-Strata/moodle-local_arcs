@@ -298,4 +298,62 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'scorm_attempt_deleted'],
         'internal' => false,
     ],
+    // The submission plugins' events extend these two, and reach their observers.
+    [
+        'eventname' => \mod_assign\event\submission_created::class,
+        'callback' => [\local_arcs\observer::class, 'assign_submission_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\submission_updated::class,
+        'callback' => [\local_arcs\observer::class, 'assign_submission_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\assessable_submitted::class,
+        'callback' => [\local_arcs\observer::class, 'assign_submission_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\submission_status_updated::class,
+        'callback' => [\local_arcs\observer::class, 'assign_submission_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\submission_duplicated::class,
+        'callback' => [\local_arcs\observer::class, 'assign_submission_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\submission_removed::class,
+        'callback' => [\local_arcs\observer::class, 'assign_submission_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\submission_graded::class,
+        'callback' => [\local_arcs\observer::class, 'assign_grade_changed'],
+        'internal' => false,
+    ],
+    // Moodle 5.3 and later: one of several markers marked a submission.
+    [
+        'eventname' => \mod_assign\event\submission_marked::class,
+        'callback' => [\local_arcs\observer::class, 'assign_grade_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\workflow_state_updated::class,
+        'callback' => [\local_arcs\observer::class, 'assign_workflow_state_updated'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_assign\event\identities_revealed::class,
+        'callback' => [\local_arcs\observer::class, 'assign_grading_changed'],
+        'internal' => false,
+    ],
+    // An assignment's settings were saved; also a course_module change, above.
+    [
+        'eventname' => \core\event\course_module_updated::class,
+        'callback' => [\local_arcs\observer::class, 'assign_updated'],
+        'internal' => false,
+    ],
 ];

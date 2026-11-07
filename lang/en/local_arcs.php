@@ -56,6 +56,7 @@ $string['privacy:metadata:arcs'] = 'User data is sent to Arcs Learning Intellige
 $string['privacy:metadata:arcs:activitycompletions'] = 'The user\'s activity completions: each activity\'s completion state, whether they viewed it, and when the state changed.';
 $string['privacy:metadata:arcs:address'] = 'The user\'s address (optional).';
 $string['privacy:metadata:arcs:alternatename'] = 'The user\'s alternate name (optional).';
+$string['privacy:metadata:arcs:assignsubmissions'] = 'The user\'s assignment submissions: each attempt\'s number, status and times, and its grade once it is released. What they submitted and the feedback they were given are not sent.';
 $string['privacy:metadata:arcs:auth'] = 'The user\'s authentication method.';
 $string['privacy:metadata:arcs:city'] = 'The user\'s city or town (optional).';
 $string['privacy:metadata:arcs:cohortmembers'] = 'The cohorts the user is a member of, and when they were added.';

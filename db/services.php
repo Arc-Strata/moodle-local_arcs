@@ -33,6 +33,14 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_assign_submissions' => [
+        'classname' => \local_arcs\external\get_assign_submissions::class,
+        'description' => 'Returns assignment submissions with their released grades, by cursor, id, course or course module.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_categories' => [
         'classname' => \local_arcs\external\get_categories::class,
         'description' => 'Returns course categories, by cursor, by id, or below given categories.',
@@ -183,6 +191,7 @@ $services = [
     'Arcs connector' => [
         'functions' => [
             'local_arcs_get_activity_completions',
+            'local_arcs_get_assign_submissions',
             'local_arcs_get_categories',
             'local_arcs_get_changes',
             'local_arcs_get_cohort_members',

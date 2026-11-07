@@ -475,6 +475,150 @@ class observer {
     }
 
     /**
+     * An assignment submission was saved, submitted, copied from the previous attempt, reverted to
+     * draft or emptied.
+     *
+     * The events name the submission: assessable_submitted, submission_status_updated,
+     * submission_duplicated and submission_removed as their object, the submission plugins'
+     * submission_created and submission_updated in other['submissionid']. In a team submission they
+     * name the group's row, and Moodle changes some members' own rows without naming them, so the
+     * assignment's submissions are refetched instead. Assignments on the site course are ignored.
+     *
+     * @param \core\event\base $event One of the \mod_assign\event submission events listed in db/events.php.
+     */
+    public static function assign_submission_changed(\core\event\base $event): void {
+        global $DB;
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        $id = $event->objecttable === 'assign_submission' ? $event->objectid : $event->other['submissionid'];
+        $submission = $DB->get_record('assign_submission', ['id' => $id], 'id, userid');
+        if (!$submission) {
+            return;
+        }
+        if (!$submission->userid) {
+            self::assign_grading_changed($event);
+            return;
+        }
+        self::recorder()->record(
+            entity::ASSIGN_SUBMISSION,
+            (int) $submission->id,
+            operation::UPSERT,
+            (int) $submission->userid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A user's grade for an assignment attempt changed: graded (submission_graded, which names the
+     * grade), or on Moodle 5.3 and later marked by one of several markers (submission_marked, which
+     * names the mark). The user's own submission for that attempt is recorded; a team member who
+     * has none has nothing to record. Assignments on the site course are ignored.
+     *
+     * @param \core\event\base $event \mod_assign\event\submission_graded or submission_marked.
+     */
+    public static function assign_grade_changed(\core\event\base $event): void {
+        global $DB;
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        $gradeid = $event->objecttable === 'assign_grades'
+            ? $event->objectid
+            : $DB->get_field('assign_mark', 'gradeid', ['id' => $event->objectid]);
+        $grade = $gradeid ? $DB->get_record('assign_grades', ['id' => $gradeid], 'assignment, userid, attemptnumber') : false;
+        if (!$grade) {
+            return;
+        }
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $grade->assignment,
+            'userid' => $grade->userid,
+            'groupid' => 0,
+            'attemptnumber' => $grade->attemptnumber,
+        ], 'id');
+        if (!$submission) {
+            return;
+        }
+        self::recorder()->record(
+            entity::ASSIGN_SUBMISSION,
+            (int) $submission->id,
+            operation::UPSERT,
+            (int) $grade->userid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A user's marking workflow state in an assignment changed. The state decides whether their
+     * grades are released, for every attempt, so each of their submissions is recorded. Assignments
+     * on the site course are ignored.
+     *
+     * @param \mod_assign\event\workflow_state_updated $event The event.
+     */
+    public static function assign_workflow_state_updated(\mod_assign\event\workflow_state_updated $event): void {
+        global $DB;
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        $submissions = $DB->get_records(
+            'assign_submission',
+            ['assignment' => $event->objectid, 'userid' => $event->relateduserid, 'groupid' => 0],
+            'id',
+            'id'
+        );
+        foreach ($submissions as $submission) {
+            self::recorder()->record(
+                entity::ASSIGN_SUBMISSION,
+                (int) $submission->id,
+                operation::UPSERT,
+                $event->relateduserid,
+                $event->courseid
+            );
+        }
+    }
+
+    /**
+     * Something changed every submission's grade in an assignment, or members' rows in a team
+     * submission, without naming them: revealing identities under blind marking releases every
+     * grade. Readers refetch the assignment's submissions; the change is named by its course module.
+     * Assignments on the site course are ignored.
+     *
+     * @param \core\event\base $event \mod_assign\event\identities_revealed, or a team submission's event.
+     */
+    public static function assign_grading_changed(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(
+            entity::ASSIGN_GRADING,
+            $event->contextinstanceid,
+            operation::UPSERT,
+            null,
+            $event->courseid
+        );
+    }
+
+    /**
+     * An assignment's settings were saved. They can rescale every grade, change the maximum grade
+     * or scale, and turn the marking workflow or anonymous marking on or off, which decide whether
+     * grades are released, all without events of their own; so readers refetch its submissions.
+     * Other modules, and assignments on the site course, are ignored.
+     *
+     * @param \core\event\course_module_updated $event The event.
+     */
+    public static function assign_updated(\core\event\course_module_updated $event): void {
+        if ($event->courseid == SITEID || $event->other['modulename'] !== 'assign') {
+            return;
+        }
+        self::recorder()->record(
+            entity::ASSIGN_GRADING,
+            $event->objectid,
+            operation::UPSERT,
+            null,
+            $event->courseid
+        );
+    }
+
+    /**
      * A cohort was created or updated.
      *
      * @param \core\event\base $event cohort_created or cohort_updated.

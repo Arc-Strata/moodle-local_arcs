@@ -87,6 +87,7 @@ class provider implements
         'quizattempts',
         'h5pactivityattempts',
         'scormattempts',
+        'assignsubmissions',
     ];
 
     /**
