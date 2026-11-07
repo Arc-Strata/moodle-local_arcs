@@ -103,13 +103,14 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * The external location names every user field local_arcs_get_users can send, their progress, grades, cohorts
-     * and log events.
+     * The external location names every user field local_arcs_get_users can send, their progress, grades, cohorts,
+     * log events and attempts.
      */
     public function test_get_metadata_lists_exported_user_data(): void {
         $items = provider::get_metadata(new collection('local_arcs'))->get_collection();
         $userfields = array_keys(get_users::execute_returns()->keys['users']->content->keys);
-        $progress = ['userenrolments', 'coursecompletions', 'activitycompletions', 'grades', 'cohortmembers', 'logevents'];
+        $progress = ['userenrolments', 'coursecompletions', 'activitycompletions', 'grades', 'cohortmembers', 'logevents',
+            'quizattempts'];
 
         $this->assertEqualsCanonicalizing(
             array_merge(array_values(array_diff($userfields, ['id'])), $progress),

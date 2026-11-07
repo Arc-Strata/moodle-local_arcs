@@ -84,6 +84,7 @@ class provider implements
         'grades',
         'cohortmembers',
         'logevents',
+        'quizattempts',
     ];
 
     /**

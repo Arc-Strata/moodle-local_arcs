@@ -312,6 +312,70 @@ class observer {
     }
 
     /**
+     * A quiz attempt was started, submitted, graded, became overdue, was abandoned, reopened or regraded.
+     *
+     * Previews are not exported, so they are ignored, as are quizzes on the site course. The attempt
+     * comes from the event's snapshot where there is one, and is read otherwise (attempt_regraded);
+     * an attempt already deleted again has its own delete.
+     *
+     * @param \core\event\base $event One of the \mod_quiz\event\attempt_* events listed in db/events.php.
+     */
+    public static function quiz_attempt_upserted(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        $attempt = $event->get_record_snapshot('quiz_attempts', $event->objectid);
+        if (!$attempt || $attempt->preview) {
+            return;
+        }
+        self::recorder()->record(
+            entity::QUIZ_ATTEMPT,
+            $event->objectid,
+            operation::UPSERT,
+            $event->relateduserid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A quiz attempt was deleted. Moodle fires this only for attempts that are not previews.
+     *
+     * @param \mod_quiz\event\attempt_deleted $event The event.
+     */
+    public static function quiz_attempt_deleted(\mod_quiz\event\attempt_deleted $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(
+            entity::QUIZ_ATTEMPT,
+            $event->objectid,
+            operation::DELETE,
+            $event->relateduserid,
+            $event->courseid
+        );
+    }
+
+    /**
+     * A quiz's question marks or maximum grade changed. Moodle rewrites every attempt's marks or
+     * grade without attempt events, so readers refetch the quiz's attempts; the change is named by
+     * the quiz's course module.
+     *
+     * @param \core\event\base $event \mod_quiz\event\slot_mark_updated or \mod_quiz\event\quiz_grade_updated.
+     */
+    public static function quiz_grading_changed(\core\event\base $event): void {
+        if ($event->courseid == SITEID) {
+            return;
+        }
+        self::recorder()->record(
+            entity::QUIZ_GRADING,
+            $event->contextinstanceid,
+            operation::UPSERT,
+            null,
+            $event->courseid
+        );
+    }
+
+    /**
      * A cohort was created or updated.
      *
      * @param \core\event\base $event cohort_created or cohort_updated.

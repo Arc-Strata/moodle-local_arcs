@@ -65,4 +65,10 @@ enum entity: string {
 
     // A grade (grade_grades.id).
     case GRADE = 'grade';
+
+    // A quiz attempt (quiz_attempts.id).
+    case QUIZ_ATTEMPT = 'quiz_attempt';
+
+    // A quiz's grading, named by its course module id. An upsert means: refetch the quiz's attempts.
+    case QUIZ_GRADING = 'quiz_grading';
 }

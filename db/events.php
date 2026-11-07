@@ -217,4 +217,60 @@ $observers = [
         'callback' => [\local_arcs\observer::class, 'cohort_member_removed'],
         'internal' => false,
     ],
+    [
+        'eventname' => \mod_quiz\event\attempt_started::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_submitted::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    // Moodle 5.3 and later: a submitted attempt was graded.
+    [
+        'eventname' => \mod_quiz\event\attempt_graded::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_becameoverdue::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_abandoned::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_reopened::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_regraded::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_manual_grading_completed::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_upserted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\attempt_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_attempt_deleted'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\slot_mark_updated::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_grading_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\quiz_grade_updated::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_grading_changed'],
+        'internal' => false,
+    ],
 ];

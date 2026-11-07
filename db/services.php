@@ -129,6 +129,14 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_quiz_attempts' => [
+        'classname' => \local_arcs\external\get_quiz_attempts::class,
+        'description' => 'Returns quiz attempts with their grades, by cursor, by id, by course or by course module.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_site_info' => [
         'classname' => \local_arcs\external\get_site_info::class,
         'description' => 'Returns the contract version, plugin and Moodle versions, site identity and log store state.',
@@ -171,6 +179,7 @@ $services = [
             'local_arcs_get_log_cursor',
             'local_arcs_get_log_events',
             'local_arcs_get_profile_fields',
+            'local_arcs_get_quiz_attempts',
             'local_arcs_get_site_info',
             'local_arcs_get_user_enrolments',
             'local_arcs_get_users',

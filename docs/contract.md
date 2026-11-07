@@ -112,6 +112,8 @@ Functions that return rows of one kind (the "state functions", such as
      `local_arcs_get_activity_completions` with `coursemoduleids` = [M];
    - a `grade_item` `upsert` for grade item G: page `local_arcs_get_grades`
      with `itemids` = [G];
+   - a `quiz_grading` `upsert` for course module M: page
+     `local_arcs_get_quiz_attempts` with `coursemoduleids` = [M];
    - a `course_category` `delete`: page `local_arcs_get_cohorts` in full.
 
    Cohort memberships are named by cohort and user, not by id (see
@@ -125,7 +127,7 @@ Functions that return rows of one kind (the "state functions", such as
    is a hint: some Moodle code paths change data without telling anyone, and
    the state functions are always the truth.
 
-Activity (views, logins, attempts and so on) is not state: it comes from the
+Activity (views, logins and so on) is not state: it comes from the
 log stream, `local_arcs_get_log_events`, read alongside with its own cursor
 (see that function). The two are independent. When Moodle's standard log store
 is off, only the log stream stops; everything above still works.
@@ -250,6 +252,8 @@ Entities:
 | `activity_completion` | `course_modules_completion.id` | |
 | `grade_item` | `grade_items.id` | |
 | `grade` | `grade_grades.id` | |
+| `quiz_attempt` | `quiz_attempts.id` | |
+| `quiz_grading` | `course_modules.id` | A quiz's marks and maximum grade. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
 
 Which Moodle events record which changes:
 
@@ -279,13 +283,16 @@ Which Moodle events record which changes:
 | `\core\event\grade_item_deleted` | `grade_item` `delete`. |
 | `\core\event\user_graded` | `grade` `upsert`, with `userid` and `courseid`. Recorded when a user's final grade is set or changes: grading in an activity, overriding in the gradebook, importing, and recalculation. |
 | `\core\event\grade_deleted` | `grade` `delete`, with `userid` and `courseid`. |
+| `\mod_quiz\event\attempt_started`, `attempt_submitted`, `attempt_graded` (Moodle 5.3 and later), `attempt_becameoverdue`, `attempt_abandoned`, `attempt_reopened`, `attempt_regraded`, `attempt_manual_grading_completed` | `quiz_attempt` `upsert`, with `userid` and `courseid`. Not recorded for previews. |
+| `\mod_quiz\event\attempt_deleted` | `quiz_attempt` `delete`, with `userid` and `courseid`. |
+| `\mod_quiz\event\slot_mark_updated` (a question's mark changed), `quiz_grade_updated` (the quiz's maximum grade changed) | `quiz_grading` `upsert`, `entityid` = the quiz's course module, `courseid` = its course. Moodle rewrites every attempt's `sumgrades`, or every attempt's `grade`, without changes of their own. |
 | `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |
 | `\core\event\cohort_deleted` | `cohort` `delete`. |
 | `\core\event\cohort_member_added` | `cohort_member` `upsert`: `entityid` = the cohort, `userid` = the member. |
 | `\core\event\cohort_member_removed` | `cohort_member` `delete`: `entityid` = the cohort, `userid` = the member. |
 
 Changes to the site course's modules (front page activities), and to their
-grade items and grades, are not recorded, since they are not exported.
+grade items, grades and attempts, are not recorded, since they are not exported.
 
 **Volume.** When the gradebook recalculates a course (after an item's
 grading settings change, for example), each grade whose final grade changes
@@ -303,7 +310,7 @@ a change of their own):
 
 - A **`user` delete** means the user is deleted: Moodle keeps a scrubbed user
   row with `deleted` true (see `local_arcs_get_users`). Treat the user's
-  enrolments, completions, grades and cohort memberships as gone, and erase
+  enrolments, completions, grades, attempts and cohort memberships as gone, and erase
   the person downstream.
 - A **`profile_field` delete** means every user's value for that field is gone.
 - A **`course_category` delete** comes with a delete, or an update for a move,
@@ -315,9 +322,9 @@ a change of their own):
   remove the membership with that `cohortid` and `userid`.
 - A **`course` delete** means everything in the course is gone: its modules,
   enrolment methods, user enrolments, course and activity completions, grade
-  items and grades.
-- A **`course_module` delete** means its activity completions and grade items
-  are gone. Each grade item's own `grade_item` `delete` is recorded too.
+  items, grades and attempts.
+- A **`course_module` delete** means its activity completions, attempts and
+  grade items are gone. Each grade item's own `grade_item` `delete` is recorded too.
 - A **`grade_item` delete** means its grades are gone. Moodle records a `grade`
   `delete` for each only in some configurations, so don't rely on them.
 - Deleting an enrolment method unenrols each user through it first, so each
@@ -327,7 +334,7 @@ a change of their own):
 without changes of their own; see "Keeping in sync", step 3):
 
 - A **`course_contents` upsert**: the course's modules, enrolments,
-  completions and grades. A `course` upsert does not imply this.
+  completions, grades and attempts (a reset can delete attempts). A `course` upsert does not imply this.
 - An **`enrol_instance` upsert**: the user enrolments through it (their
   `enrolstatus`).
 - A **`course_category` upsert**: the categories below it (hiding, showing and
@@ -339,6 +346,10 @@ without changes of their own; see "Keeping in sync", step 3):
   end up with a new state.
 - A **`grade_item` upsert**: its grades. Hiding, showing, locking and
   unlocking an item also set the `hidden` and locked state of its grades.
+- A **`quiz_grading` upsert**: the quiz's attempts. Changing a question's mark
+  rewrites every finished attempt's `sumgrades` and `timemodified`, and the
+  quiz's `maxsumgrades`; changing the quiz's maximum grade changes every
+  attempt's `grade` and `grademax`.
 
 **Changes Moodle makes without any event**, which only a full reconciliation
 finds:
@@ -365,6 +376,9 @@ finds:
 - A grade is recorded only when its `finalgrade` changes. Changing only a
   grade's `hidden` or `overridden` flag, its feedback, or its `rawgrade` while
   it is overridden or locked, records nothing.
+- A quiz attempt's `timemodified` changes as the user saves each page of it.
+  Only starting, submitting, grading and the other changes listed above are
+  recorded.
 - While a grade item has `needsupdate` set, Moodle has yet to recalculate its
   grades (on Moodle 5.3 and later, a course reset recalculates in the
   background). The recalculation records the grades it changes when it runs.
@@ -693,6 +707,42 @@ Pass or fail is `finalgrade >= gradepass` where the item has a `gradepass`
 above 0. Grades of deleted users are deleted by Moodle.
 
 Errors: `limit_exceeded`, `invalidparameter`.
+
+### local_arcs_get_quiz_attempts
+
+Users' attempts at quizzes, from Moodle's `quiz_attempts` table, with each
+attempt's grade on the quiz's scale. Responses are never returned. Previews,
+attempts at quizzes in the site course, and (on Moodle 5.3 and later) attempts
+Moodle has created in advance that nobody has started (`notstarted`) are never
+returned. A state function (see "Paging"): returns `quizattempts` and `next`.
+
+Parameters: `after`, `limit`, `ids` (quiz attempt ids), as in "Paging", and
+one of two filters: `courseids` or `coursemoduleids`.
+
+Each quiz attempt:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Quiz attempt id. |
+| `userid` | int | User id. |
+| `coursemoduleid` | int | The quiz's course module id (see `local_arcs_get_course_modules`). |
+| `attempt` | int | Attempt number: 1 for the user's first attempt at this quiz. |
+| `state` | string | `inprogress`, `overdue` (time is up, still to be submitted within the grace period), `finished` or `abandoned`. On Moodle 5.3 and later also `submitted`: finished, but not graded yet. |
+| `timestart` | int | When the attempt was started. |
+| `timefinish` | int | When the attempt was submitted or abandoned; 0 until then. |
+| `timemodified` | int | When the attempt last changed. |
+| `sumgrades` | float or null | The attempt's total of question marks. Null while it is not graded (not finished yet, or questions still to be marked by hand). |
+| `maxsumgrades` | float | The quiz's total of question marks. |
+| `grade` | float or null | `sumgrades` rescaled to the quiz's grade: `sumgrades / maxsumgrades * grademax`, unrounded. Null when `sumgrades` is null, and when `maxsumgrades` is 0. |
+| `grademax` | float | The quiz's maximum grade. |
+| `passed` | bool or null | Always null: a quiz does not decide passing. Compare `grade` with the quiz's grade item's `gradepass` (see `local_arcs_get_grade_items`). |
+
+The quiz's grade in the gradebook combines the attempts by the quiz's grading
+method (highest, average, first or last attempt); it is the quiz's grade in
+`local_arcs_get_grades`. Attempts of deleted users stay.
+
+Errors: `module_not_installed` (the quiz module has been uninstalled, so the
+site has no quiz attempts), `limit_exceeded`, `invalidparameter`.
 
 ### local_arcs_get_cohorts
 
