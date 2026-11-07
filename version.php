@@ -27,8 +27,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_arcs';
-$plugin->version = 2026110604;
+$plugin->version = 2026110605;
 $plugin->requires = 2024100700;
 $plugin->supported = [405, 503];
-$plugin->maturity = MATURITY_ALPHA;
-$plugin->release = '0.1.0';
+$plugin->maturity = MATURITY_BETA;
+$plugin->release = '1.0.0';

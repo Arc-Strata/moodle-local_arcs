@@ -3,11 +3,12 @@
 Releases of `local_arcs`. Breaking changes to the web service contract bump the
 contract version and are listed here.
 
-## Unreleased
+## 1.0.0 (2026-11-06)
 
-- Initial plugin skeleton.
+First release, beta. Contract version 1 (see `docs/contract.md`). Supports Moodle 4.5 to 5.3.
+
 - Capability `local/arcs:export` and the Arcs connector external service.
-- Web service function `local_arcs_get_site_info` (contract version 1).
+- Web service function `local_arcs_get_site_info`.
 - Change log with retention setting and cleanup task, and web service function `local_arcs_get_changes`.
 - Web service functions `local_arcs_get_users` and `local_arcs_get_profile_fields`, with
   change log entries for users and custom profile field definitions.

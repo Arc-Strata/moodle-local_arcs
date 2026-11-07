@@ -7,8 +7,8 @@ promises what is written here; anything not written here is not part of the
 contract.
 
 **Contract version: 1** (reported by `local_arcs_get_site_info` as
-`contractversion`). The contract is in development until plugin release 1.0.0;
-until then it may change without a version bump.
+`contractversion`), first released with plugin release 1.0.0. See
+"Versioning" for how it may change.
 
 ## Access
 
@@ -71,6 +71,10 @@ Functions that return rows of one kind (the "state functions", such as
   `id` order, `after` is ignored and `next` is null. Repeated ids count once,
   and at most `limit` ids may be given. This is how a reader follows the change
   log to fetch current state. An empty `ids` list means "no filter".
+- As a guide, not a promise: on a test site, a page of 1,000 rows took a
+  tenth to a fifth of a second over REST and was up to about 600 KB of JSON
+  (users with several custom profile fields are the largest). The default is
+  the maximum, so most readers need not pass `limit`.
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
   `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
@@ -265,7 +269,11 @@ grade items and grades, are not recorded, since they are not exported.
 
 **Volume.** When the gradebook recalculates a course (after an item's
 grading settings change, for example), each grade whose final grade changes
-is recorded, so one action in a large course can record many `grade` rows.
+is recorded, so one action in a large course can record many `grade` rows:
+changing one item's maximum grade, or how the course total is calculated, in
+a course of 2,000 learners records about 2,000 (each learner's course total).
+Enrolling a user with a role records two `user_enrolment` rows (the
+enrolment, then the role).
 
 Changes are recorded only after the Moodle transaction that made them commits,
 so a change that is rolled back is never listed.
