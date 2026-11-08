@@ -748,6 +748,13 @@ Each grade:
 Pass or fail is `finalgrade >= gradepass` where the item has a `gradepass`
 above 0. Grades of deleted users are deleted by Moodle.
 
+An attempt (see the attempt functions) is judged the same way, on a value each
+attempt function says how to put on the grade item's range. The gradebook's
+`finalgrade` can still differ from it: the gradebook combines attempts by the
+activity's grading method, and can apply an item's multiplier and offset or a
+teacher's override. For the activity's overall result, `finalgrade` is the
+authority.
+
 Errors: `limit_exceeded`, `invalidparameter`.
 
 ### local_arcs_get_h5pactivity_attempts
@@ -776,7 +783,15 @@ Each H5P activity attempt:
 | `success` | bool or null | Whether the content reported the attempt successful; null when it did not say. |
 | `timecreated` | int | When the attempt was started. |
 | `timemodified` | int | When the attempt last changed. |
-| `passed` | bool or null | Whether the attempt passed: `success`, since the H5P content decides it. Null when the content does not; then compare with the activity's grade item's `gradepass` (see `local_arcs_get_grade_items`). |
+| `passed` | bool or null | Whether the attempt passed: `success`, since the H5P content decides it. Null when the content does not; then compare `scaled × grademax` with `gradepass`, both from the activity's grade item (see below). |
+
+**Grade.** Moodle puts an attempt on the grade item's range as `scaled ×
+grademax` (the activity's maximum grade, `grademin` being 0); `rawscore` and
+`maxscore` are the content's own and are not on it. To judge an attempt where
+`passed` is null, compare `scaled × grademax` with the grade item's
+`gradepass`. Only for activities graded in points: with a scale, Moodle's
+conversion gives no meaningful value, and with no grade there is nothing to
+compare.
 
 An attempt is recorded only while the activity tracks attempts (its
 "Enable attempt tracking" setting). The activity's grade in the gradebook
@@ -890,9 +905,9 @@ Each assignment submission:
 | `grade` | float or null | The grade for this attempt: points, or with a scale the position on the scale (1 for its first item; see `local_arcs_get_grade_items` for the scale's items). Before any late penalty. Null until the attempt is graded, when it was graded "No grade", when the assignment is not graded, and while the grade is withheld (see below). |
 | `grademax` | float or null | The assignment's maximum points; null when it is graded on a scale or not graded. |
 | `scaleid` | int or null | The scale the assignment is graded on; null when it is graded in points or not graded. |
-| `penalty` | float or null | On Moodle 5.0 and later, the percentage deducted from `grade` for lateness (0 for none); the gradebook holds the grade after it. Null when `grade` is null, and before Moodle 5.0. |
+| `penalty` | float or null | On Moodle 5.0 and later, the percentage deducted from `grade` for lateness (0 for none). The gradebook holds the grade after it, `grade × (1 − penalty / 100)`, and judges passing on that. Null when `grade` is null, and before Moodle 5.0. |
 | `timegraded` | int or null | When the grade last changed; null when `grade` is null. |
-| `passed` | bool or null | Always null: an assignment does not decide passing. Compare `grade` with the assignment's grade item's `gradepass` (see `local_arcs_get_grade_items`). |
+| `passed` | bool or null | Always null: an assignment does not decide passing. Compare `grade × (1 − penalty / 100)` with the assignment's grade item's `gradepass`, counting a null `penalty` as 0 (see `local_arcs_get_grade_items`). |
 
 **Withheld grades.** A grade is returned only once Moodle would release it to
 the gradebook, so that nothing is sent that the user's teachers have not
