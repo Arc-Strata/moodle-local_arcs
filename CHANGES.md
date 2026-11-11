@@ -3,9 +3,9 @@
 Releases of `local_arcs`. Breaking changes to the web service contract bump the
 contract version and are listed here.
 
-## 1.0.0 (2026-11-06)
+## 1.0.0 (2026-11-11)
 
-First release, beta. Contract version 1 (see `docs/contract.md`). Supports Moodle 4.5 to 5.3.
+First release. Contract version 1 (see `docs/contract.md`). Supports Moodle 4.5 to 5.3.
 
 - Capability `local/arcs:export` and the Arcs connector external service.
 - Web service function `local_arcs_get_site_info`, with the site's name and default language,

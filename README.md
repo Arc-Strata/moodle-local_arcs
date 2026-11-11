@@ -10,7 +10,14 @@ courses, course modules, enrolments, course and activity completions, grade
 items, grades, and the standard log, in Moodle's own terms. A change log tells
 Arcs which records changed since its last pull.
 
-**Status:** 1.0.0, beta.
+**Status:** 1.0.0, stable.
+
+## You need an Arcs account
+
+This plugin only does something when Arcs connects to it. Arcs is a commercial
+service from Arcs Learning, and you need an Arcs account to use it. See
+<https://arcslearning.com> to find out more or to get started. Without an
+account, the plugin installs and runs but sends no data anywhere.
 
 ## Requirements
 
@@ -94,6 +101,9 @@ times only, never field values. It is emptied after the retention period, and
 handled by Moodle's privacy API. When a user is deleted, the rows recording
 that deletion are kept until the retention period ends, so that Arcs deletes
 its copy of the person.
+
+How Arcs handles the data it receives is set out in the Arcs privacy policy:
+<https://arcslearning.com/privacy-policy>.
 
 To stop sending data, disable the Arcs connector service or delete its token.
 
