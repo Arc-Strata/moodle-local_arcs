@@ -20,7 +20,7 @@ namespace local_arcs\local;
  * Reads the state of Moodle's standard log store (logstore_standard) and the bounds of its table.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class logstore {

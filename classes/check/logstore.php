@@ -28,7 +28,7 @@ use local_arcs\local\logstore as logstore_state;
  * so a disabled store is a warning.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class logstore extends check {

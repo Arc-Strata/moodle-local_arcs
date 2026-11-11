@@ -24,7 +24,7 @@ use core\output\action_link;
  * Status check: the REST protocol is enabled, since Arcs calls the site through it.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class restprotocol extends check {

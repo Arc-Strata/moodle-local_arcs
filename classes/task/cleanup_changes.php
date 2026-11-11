@@ -23,7 +23,7 @@ use local_arcs\local\settings\settings;
  * Deletes change log rows older than the retention setting.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cleanup_changes extends \core\task\scheduled_task {

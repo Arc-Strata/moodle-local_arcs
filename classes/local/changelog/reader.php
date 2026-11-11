@@ -26,7 +26,7 @@ use core\exception\moodle_exception;
  * after a higher one under concurrency; no row below the mark is still in flight.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class reader {

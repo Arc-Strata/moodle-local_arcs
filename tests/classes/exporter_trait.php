@@ -23,7 +23,7 @@ use local_arcs\local\changelog\recorder;
  *
  * @package    local_arcs
  * @category   test
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 trait exporter_trait {

@@ -23,7 +23,7 @@ namespace local_arcs\local\source;
  * (one row per module and user); viewed is derived from it as core does.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class activity_completions extends source {

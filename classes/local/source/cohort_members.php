@@ -23,7 +23,7 @@ namespace local_arcs\local\source;
  * so readers can select memberships by cohorts and users as well as by id.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cohort_members extends source {

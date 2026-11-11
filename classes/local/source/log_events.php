@@ -26,7 +26,7 @@ use local_arcs\local\logstore;
  * user is returned: Moodle puts the anonymous party in either.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class log_events extends source {

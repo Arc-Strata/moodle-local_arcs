@@ -24,7 +24,7 @@ namespace local_arcs\local\source;
  * needs from other tables can be read in one query per page, not one per row.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class source {

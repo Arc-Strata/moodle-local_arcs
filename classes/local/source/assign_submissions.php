@@ -26,7 +26,7 @@ namespace local_arcs\local\source;
  * group (userid 0) and submissions to assignments on the site course are left out.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class assign_submissions extends attempts {

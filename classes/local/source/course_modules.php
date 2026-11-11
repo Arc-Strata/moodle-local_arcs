@@ -23,7 +23,7 @@ namespace local_arcs\local\source;
  * Instance names are read from each module type's own table, one query per type per page.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class course_modules extends source {

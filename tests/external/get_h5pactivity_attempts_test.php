@@ -30,7 +30,7 @@ use local_arcs\tests\exporter_trait;
  *
  * @package    local_arcs
  * @category   test
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \local_arcs\external\get_h5pactivity_attempts
  * @covers     \local_arcs\local\source\h5pactivity_attempts

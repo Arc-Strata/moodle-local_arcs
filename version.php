@@ -20,7 +20,7 @@
  * Supports Moodle 4.5 (PHP 8.1 to 8.3) to 5.3 (PHP 8.3 to 8.4).
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 

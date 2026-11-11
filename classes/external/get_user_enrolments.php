@@ -28,7 +28,7 @@ use local_arcs\local\source\source;
  * Web service function local_arcs_get_user_enrolments.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class get_user_enrolments extends state_function {

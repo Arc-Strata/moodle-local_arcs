@@ -24,7 +24,7 @@ use core\output\action_link;
  * Status check: the Arcs connector external service is enabled. It is installed disabled.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class service extends check {

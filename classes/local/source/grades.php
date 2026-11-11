@@ -23,7 +23,7 @@ namespace local_arcs\local\source;
  * free text that can hold anything, so it is never read.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class grades extends source {

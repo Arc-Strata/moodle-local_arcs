@@ -37,7 +37,7 @@ require_once($CFG->dirroot . '/mod/assign/locallib.php');
  *
  * @package    local_arcs
  * @category   test
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \local_arcs\external\get_assign_submissions
  * @covers     \local_arcs\local\source\assign_submissions

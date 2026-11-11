@@ -30,7 +30,7 @@ use local_arcs\local\source\source;
  * reader follows such changes with both. Neither can be combined with ids.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class get_cohort_members extends state_function {

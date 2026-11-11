@@ -23,7 +23,7 @@ namespace local_arcs\local\source;
  * Scale items are read once per page, for the scales on the page.
  *
  * @package    local_arcs
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class grade_items extends source {

@@ -31,7 +31,7 @@ require_once($CFG->dirroot . '/cohort/lib.php');
  *
  * @package    local_arcs
  * @category   test
- * @copyright  2026 David Ells
+ * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \local_arcs\observer
  */
