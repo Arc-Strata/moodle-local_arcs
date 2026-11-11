@@ -104,7 +104,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
     /**
      * The external location names every user field local_arcs_get_users can send, their progress, grades, cohorts,
-     * log events and attempts.
+     * log events and attempts, and whether they are a site administrator.
      */
     public function test_get_metadata_lists_exported_user_data(): void {
         $items = provider::get_metadata(new collection('local_arcs'))->get_collection();
@@ -113,7 +113,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'quizattempts', 'h5pactivityattempts', 'scormattempts', 'assignsubmissions'];
 
         $this->assertEqualsCanonicalizing(
-            array_merge(array_values(array_diff($userfields, ['id'])), $progress),
+            array_merge(array_values(array_diff($userfields, ['id'])), $progress, ['siteadmin']),
             array_keys($items[1]->get_privacy_fields())
         );
     }

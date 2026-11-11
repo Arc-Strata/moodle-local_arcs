@@ -185,6 +185,8 @@ Returns an object:
 | `changelogpurgedupto` | int | Every change up to this id has been deleted for age; a cursor below it is expired. 0 when nothing has been deleted. |
 | `changelogretentiondays` | int | Days the change log keeps rows. Read changes more often than this. |
 | `optionalfields` | list of strings | The optional user fields this site exports (see `local_arcs_get_users`): user field names, such as `department`, and `profile_field_` followed by a custom profile field's shortname. Optional fields not listed are withheld. Changing the choice records no change: when this list differs from the one you saw last, refetch every user. |
+| `guestid` | int | The guest user's id, or 0 if the site has no guest user. |
+| `siteadmins` | list of ints | The site administrators' user ids, in the order Moodle keeps them (the first is the main administrator). Entries in the site's setting that are not user ids are left out; an id may name a user that no longer exists. Changing who is an administrator records no change: this list is current on every call. |
 
 Errors: none beyond the access errors above.
 
@@ -435,8 +437,9 @@ A state function (see "Paging"): returns `users` and `next`.
 Parameters: `after`, `limit`, `ids` (user ids), as in "Paging".
 
 Every user is returned, including the guest user, administrators, suspended
-users and deleted users. Passwords, secrets, IP addresses and session data are
-never returned.
+users and deleted users. Site info's `guestid` and `siteadmins` say which users
+are the guest and the administrators. Passwords, secrets, IP addresses and
+session data are never returned.
 
 Each user:
 

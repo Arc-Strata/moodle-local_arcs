@@ -100,6 +100,11 @@ class get_site_info extends external_api {
                 new external_value(PARAM_RAW, 'A user field column, or profile_field_ and a custom profile field shortname'),
                 'Optional user fields the site exports; any optional field not listed is withheld'
             ),
+            'guestid' => new external_value(PARAM_INT, 'The guest user\'s id, or 0 if there is none'),
+            'siteadmins' => new external_multiple_structure(
+                new external_value(PARAM_INT, 'A site administrator\'s user id'),
+                'The site administrators\' user ids, in the order Moodle keeps them'
+            ),
         ]);
     }
 }

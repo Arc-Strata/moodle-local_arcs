@@ -77,6 +77,7 @@ class provider implements
         'lastlogin',
         'timecreated',
         'timemodified',
+        'siteadmin',
         'profilefields',
         'userenrolments',
         'coursecompletions',

@@ -76,6 +76,42 @@ final class get_site_info_test extends \advanced_testcase {
         $this->assertSame(0, $result['changelogpurgedupto']);
         $this->assertSame(30, $result['changelogretentiondays']);
         $this->assertSame(['department', 'institution', 'city', 'country'], $result['optionalfields']);
+        $this->assertSame((int) $CFG->siteguest, $result['guestid']);
+        $this->assertSame([2], $result['siteadmins']);
+    }
+
+    /**
+     * The site administrators are reported in Moodle's order, leaving out entries that are not user ids.
+     */
+    public function test_execute_reports_site_admins(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $first = $this->getDataGenerator()->create_user();
+        $second = $this->getDataGenerator()->create_user();
+
+        set_config('siteadmins', $second->id . ',2,' . $first->id);
+        $this->assertSame([(int) $second->id, 2, (int) $first->id], $this->call()['siteadmins']);
+
+        set_config('siteadmins', '-1,,' . $first->id);
+        $this->assertSame([(int) $first->id], $this->call()['siteadmins']);
+
+        set_config('siteadmins', '');
+        $this->assertSame([], $this->call()['siteadmins']);
+    }
+
+    /**
+     * A site without a guest user reports 0.
+     *
+     * Moodle finds the guest again by username whenever siteguest is unset, so the account itself has to go.
+     */
+    public function test_execute_reports_no_guest(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $DB->delete_records('user', ['username' => 'guest']);
+        unset_config('siteguest');
+
+        $this->assertSame(0, $this->call()['guestid']);
     }
 
     /**

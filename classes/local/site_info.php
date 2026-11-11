@@ -85,6 +85,20 @@ class site_info {
             'changelogpurgedupto' => $this->retention->purged_up_to(),
             'changelogretentiondays' => $this->settings->retention_days(),
             'optionalfields' => $this->settings->optional_fields(),
+            'guestid' => (int) ($this->cfg->siteguest ?? 0),
+            'siteadmins' => $this->site_admins(),
         ];
+    }
+
+    /**
+     * Returns the site administrators' user ids, in the order Moodle keeps them.
+     *
+     * Entries that are not positive ids, such as the -1 Moodle's own tests use for "nobody", are left out.
+     *
+     * @return int[]
+     */
+    private function site_admins(): array {
+        $ids = array_map('intval', explode(',', (string) ($this->cfg->siteadmins ?? '')));
+        return array_values(array_filter($ids, fn(int $id): bool => $id > 0));
     }
 }

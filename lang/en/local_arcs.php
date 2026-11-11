@@ -85,6 +85,7 @@ $string['privacy:metadata:arcs:phone2'] = 'The user\'s mobile phone number (opti
 $string['privacy:metadata:arcs:profilefields'] = 'The user\'s values for the custom profile fields an administrator has selected (optional).';
 $string['privacy:metadata:arcs:quizattempts'] = 'The user\'s quiz attempts: each attempt\'s number, state, start and finish times, and marks and grade. Their answers are not sent.';
 $string['privacy:metadata:arcs:scormattempts'] = 'The user\'s SCORM attempts: for each part of the package, the status, score and start time it reported. Their answers and other tracking data are not sent.';
+$string['privacy:metadata:arcs:siteadmin'] = 'Whether the user is a site administrator.';
 $string['privacy:metadata:arcs:suspended'] = 'Whether the user\'s account is suspended.';
 $string['privacy:metadata:arcs:timecreated'] = 'When the user\'s account was created.';
 $string['privacy:metadata:arcs:timemodified'] = 'When the user\'s account was last changed.';
