@@ -44,12 +44,17 @@ final class get_log_cursor_test extends \advanced_testcase {
     private const TIME = 1790000000;
 
     /**
-     * Enables the standard log store and acts as the exporter with an empty log.
+     * Enables the standard log store, unbuffered, and acts as the exporter with an empty log.
+     *
+     * Unbuffered, so the events set_exporter() triggers are written now and deleted below, not
+     * flushed when the test's reset disposes of the log manager.
      */
     private function set_up_log(): void {
         global $DB;
         $this->resetAfterTest();
         set_config('enabled_stores', 'logstore_standard', 'tool_log');
+        set_config('buffersize', 0, 'logstore_standard');
+        get_log_manager(true);
         $this->set_exporter();
         $DB->delete_records(logstore::TABLE);
     }

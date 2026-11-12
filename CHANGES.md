@@ -3,6 +3,18 @@
 Releases of `local_arcs`. Breaking changes to the web service contract bump the
 contract version and are listed here.
 
+## 1.0.1 (2026-11-12)
+
+Documentation and testing only; no change to the code or the contract.
+
+- The README describes the plugin as usable by any system that calls Moodle's REST web
+  services, not only Arcs, with a `curl` example for trying it. Its privacy section now
+  lists quiz, H5P and SCORM attempts and assignment submissions.
+- The privacy metadata says data goes to whichever system reads the service, such as Arcs.
+- CI also runs on MySQL 8.4.
+- A PHPUnit test (`get_log_cursor_test`) no longer leaves buffered log writes for the test
+  reset, which printed "Unexpected DB writes".
+
 ## 1.0.0 (2026-11-11)
 
 First release. Contract version 1 (see `docs/contract.md`). Supports Moodle 4.5 to 5.3.
