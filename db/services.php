@@ -113,6 +113,14 @@ $functions = [
         'ajax' => false,
         'readonlysession' => true,
     ],
+    'local_arcs_get_grading_definitions' => [
+        'classname' => \local_arcs\external\get_grading_definitions::class,
+        'description' => 'Returns assignment rubrics and marking guides with their criteria, by cursor, id, course or module.',
+        'type' => 'read',
+        'capabilities' => 'local/arcs:export',
+        'ajax' => false,
+        'readonlysession' => true,
+    ],
     'local_arcs_get_h5pactivity_attempts' => [
         'classname' => \local_arcs\external\get_h5pactivity_attempts::class,
         'description' => 'Returns H5P activity attempts with their scores, by cursor, by id, by course or by course module.',
@@ -201,6 +209,7 @@ $services = [
             'local_arcs_get_courses',
             'local_arcs_get_grade_items',
             'local_arcs_get_grades',
+            'local_arcs_get_grading_definitions',
             'local_arcs_get_h5pactivity_attempts',
             'local_arcs_get_log_cursor',
             'local_arcs_get_log_events',

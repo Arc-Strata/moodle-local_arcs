@@ -79,8 +79,9 @@ Functions that return rows of one kind (the "state functions", such as
   the maximum, so most readers need not pass `limit`.
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
   `limit_exceeded`. Functions that can return each row's detail
-  (`includedetail`) hold fewer rows per page when asked for it; see each
-  function. A `limit` below 1 or a negative `after` is refused with
+  (`includedetail`) hold fewer rows per page when asked for it, and
+  `local_arcs_get_grading_definitions`, whose rows always carry theirs, holds
+  fewer rows on every page; see each function. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
 - Some state functions also take a **filter**, a list of ids that narrows the
   rows paged by `after` and `limit`: `courseids` (rows in those courses),
@@ -119,11 +120,16 @@ Functions that return rows of one kind (the "state functions", such as
    - a `scorm_tracking` `upsert` for course module M: page
      `local_arcs_get_scorm_attempts` with `coursemoduleids` = [M];
    - an `assign_grading` `upsert` for course module M: page
-     `local_arcs_get_assign_submissions` with `coursemoduleids` = [M];
+     `local_arcs_get_assign_submissions` and
+     `local_arcs_get_grading_definitions` with `coursemoduleids` = [M];
    - a `course_category` `delete`: page `local_arcs_get_cohorts` in full.
 
    Cohort memberships are named by cohort and user, not by id (see
-   `local_arcs_get_cohort_members`).
+   `local_arcs_get_cohort_members`). Rubrics and marking guides have no
+   change entity: an assignment submission fetched with `includedetail` that
+   names a grading definition, criterion or level you don't hold means
+   "fetch that definition" (`local_arcs_get_grading_definitions` with
+   `ids`).
 4. On every sync, compare site info's `optionalfields` with the list you saw
    last time. If it differs, refetch every user with `local_arcs_get_users`:
    changing that setting changes every user's exported fields, and records no
@@ -266,7 +272,7 @@ Entities:
 | `scorm_tracking` | `course_modules.id` | A SCORM package's attempts. There is no `delete`; an `upsert` means: refetch the package's attempts. |
 | `quiz_grading` | `course_modules.id` | What every attempt at a quiz shows: its marks, maximum grade, sections and questions' names. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
 | `assign_submission` | `assign_submission.id` | |
-| `assign_grading` | `course_modules.id` | An assignment's submissions and grades. There is no `delete`; an `upsert` means: refetch the assignment's submissions. |
+| `assign_grading` | `course_modules.id` | An assignment's submissions and grades. There is no `delete`; an `upsert` means: refetch the assignment's submissions and its rubrics and marking guides. |
 
 Which Moodle events record which changes:
 
@@ -372,7 +378,8 @@ without changes of their own; see "Keeping in sync", step 3):
   unlocking an item also set the `hidden` and locked state of its grades.
 - A **`scorm_tracking` upsert**: the package's attempts. An attempt was
   deleted; it is the one no longer returned.
-- An **`assign_grading` upsert**: the assignment's submissions. Revealing
+- An **`assign_grading` upsert**: the assignment's submissions and its
+  rubrics and marking guides. Revealing
   identities releases every grade; saving the assignment's settings can change
   every grade and its range, or whether grades are released; and in a team
   submission, one member's action changes other members' submissions.
@@ -426,6 +433,10 @@ finds:
 - A learner deleting their own SCORM attempts (a capability no role has by
   default) records nothing. So does updating a package so that a SCO is
   removed, which deletes that SCO's values from every attempt.
+- Editing an assignment's rubric or marking guide, and choosing another
+  grading method, record nothing: Moodle fires no event for either. A rubric
+  edit can delete levels and criteria that submissions' `fillings` refer to,
+  and change their scores without changing the grades.
 - A quiz attempt's `timemodified`, and its slots' `state`, change as the user
   saves each page of it. Only starting, submitting, grading and the other
   changes listed above are recorded.
@@ -927,7 +938,11 @@ Submissions to assignments in the site course are never returned. A state
 function (see "Paging"): returns `assignsubmissions` and `next`.
 
 Parameters: `after`, `limit`, `ids` (assignment submission ids), as in
-"Paging", and one of two filters: `courseids` or `coursemoduleids`.
+"Paging", one of two filters: `courseids` or `coursemoduleids`, and
+`includedetail` (boolean, default false): whether to return each
+submission's `gradingdefinitionid` and `fillings`. With `includedetail`, a
+page holds at most 100 submissions, whatever `limit` says (pass `next` on as
+usual), and more than 100 `ids` are refused with `limit_exceeded`.
 
 Each assignment submission:
 
@@ -947,6 +962,27 @@ Each assignment submission:
 | `penalty` | float or null | On Moodle 5.0 and later, the percentage deducted from `grade` for lateness (0 for none). The gradebook holds the grade after it, `grade × (1 − penalty / 100)`, and judges passing on that. Null when `grade` is null, and before Moodle 5.0. |
 | `timegraded` | int or null | When the grade last changed; null when `grade` is null. |
 | `passed` | bool or null | Always null: an assignment does not decide passing. Compare `grade × (1 − penalty / 100)` with the assignment's grade item's `gradepass`, counting a null `penalty` as 0 (see `local_arcs_get_grade_items`). |
+| `gradingdefinitionid` | int or null | Only with `includedetail`: the rubric or marking guide the grade was given with (see `local_arcs_get_grading_definitions`). Null when `grade` is null, and when the grade was not given with a rubric or marking guide (see below). |
+| `fillings` | list | Only with `includedetail`: how each of the definition's criteria was marked, in the definition's criterion order (see below). Empty when `gradingdefinitionid` is null. |
+
+**Fillings.** When an assignment is graded with a rubric or marking guide
+(Moodle's advanced grading), the grader marks each criterion, and Moodle
+works out `grade` from those marks. A submission's fillings are those of the
+marking its grade currently shows, for the assignment's current grading
+method: none when the method is simple direct grading or any method other
+than rubric and marking guide, or when the grade was given before the
+current method was chosen. Remarks and overall feedback are never returned.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `criterionid` | int | The criterion. |
+| `levelid` | int or null | The rubric level chosen. Null for a marking guide, and when no level was chosen or the level has since been deleted. |
+| `score` | float or null | For a rubric, the chosen level's score, null when `levelid` is null; for a marking guide, the score given. |
+
+A rubric or marking guide edited after grading keeps the fillings Moodle
+already holds until the submission is graded again; fillings for a
+criterion the edit deleted are not returned. A filling's score is the
+level's score now, which an edit can change without changing `grade`.
 
 **Withheld grades.** A grade is returned only once Moodle would release it to
 the gradebook, so that nothing is sent that the user's teachers have not
@@ -972,6 +1008,63 @@ after any late penalty. Submissions of deleted users stay.
 Errors: `module_not_installed` (the assignment module has been uninstalled,
 so the site has no assignment submissions), `limit_exceeded`,
 `invalidparameter`.
+
+### local_arcs_get_grading_definitions
+
+The rubrics and marking guides of assignments (Moodle's advanced grading),
+from Moodle's `grading_definitions` table, with their criteria: what an
+assignment submission's `fillings` refer to. Only the definitions of
+assignments' submissions are returned, of those two methods, and not those of
+assignments in the site course. An assignment holds at most one definition
+of each method, whether or not it is the method in use. A state function (see
+"Paging"): returns `gradingdefinitions` and `next`.
+
+Parameters: `after`, `limit`, `ids` (grading definition ids), as in
+"Paging", and one of two filters: `courseids` or `coursemoduleids`. Every
+definition carries its criteria, so a page holds at most 100 definitions,
+whatever `limit` says (pass `next` on as usual), and more than 100 `ids` are
+refused with `limit_exceeded`.
+
+Each grading definition:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Grading definition id. |
+| `coursemoduleid` | int | The assignment's course module id (see `local_arcs_get_course_modules`). |
+| `method` | string | `rubric` or `guide` (a marking guide). |
+| `active` | bool | Whether it is the assignment's grading method now. Grades given with a definition that is no longer active keep their values, but submissions no longer return its fillings. |
+| `timemodified` | int | When the definition last changed. |
+| `criteria` | list | The criteria, in the definition's order (see below). |
+
+Each criterion. A rubric's criterion has a description and levels to choose
+from; a marking guide's has a name and a maximum score, and the grader gives
+a score up to it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Criterion id. |
+| `sortorder` | int | Its position in the definition. |
+| `description` | string or null | A rubric criterion's description, as plain text (see below). Null for a marking guide. |
+| `shortname` | string or null | A marking guide criterion's name, raw. Null for a rubric. |
+| `maxscore` | float or null | A marking guide criterion's maximum score. Null for a rubric: its range runs from its lowest level's score to its highest. |
+| `levels` | list | A rubric criterion's levels, by score: `id` (int), `score` (float) and `definition` (string, plain text). Empty for a marking guide. |
+
+Unlike other strings in this contract, rubric descriptions and level
+definitions are converted to **plain text**: HTML is removed (as Moodle's
+`html_to_text` does it, which writes bold as capitals and emphasis between
+underscores), and the line breaks the teacher typed are kept. Lines are not
+wrapped.
+
+The definition's name and description, a marking guide criterion's
+descriptions for students and markers, and its frequently used comments are
+not returned. Definitions hold no user data.
+
+Editing a definition records no change (see `local_arcs_get_changes`); an
+`assign_grading` upsert for its assignment means refetching it, and so does a
+submission naming one of its criteria or levels that you don't hold.
+
+Errors: `module_not_installed` (the assignment module has been uninstalled),
+`limit_exceeded`, `invalidparameter`.
 
 ### local_arcs_get_cohorts
 

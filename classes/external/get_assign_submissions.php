@@ -19,6 +19,7 @@ namespace local_arcs\external;
 use core\exception\invalid_parameter_exception;
 use core\exception\moodle_exception;
 use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_arcs\local\source\assign_submissions;
@@ -28,7 +29,8 @@ use local_arcs\local\source\source;
  * Web service function local_arcs_get_assign_submissions.
  *
  * It takes two filters, courseids and coursemoduleids, which cannot be combined with
- * each other or with ids.
+ * each other or with ids. With includedetail, each graded submission also carries its rubric or
+ * marking guide fillings.
  *
  * @package    local_arcs
  * @copyright  2026 Arcs Learning
@@ -44,6 +46,13 @@ class get_assign_submissions extends state_function {
         return new external_function_parameters(self::paging_parameters() + [
             'courseids' => self::filter_parameter('Return only assignment submissions in these courses'),
             'coursemoduleids' => self::filter_parameter('Return only submissions to these assignments, by course module id'),
+            'includedetail' => new external_value(
+                PARAM_BOOL,
+                'Whether to return each graded submission\'s rubric or marking guide fillings. Pages then hold at ' .
+                    'most ' . source::DETAIL_MAX_LIMIT . ' submissions',
+                VALUE_DEFAULT,
+                false
+            ),
         ]);
     }
 
@@ -55,6 +64,7 @@ class get_assign_submissions extends state_function {
      * @param int[] $ids Return only these submissions; after is then ignored.
      * @param int[] $courseids Return only submissions in these courses.
      * @param int[] $coursemoduleids Return only submissions to these assignments, by course module id.
+     * @param bool $includedetail Whether to return each graded submission's rubric or marking guide fillings.
      * @return array
      * @throws moodle_exception module_not_installed, when the assignment module is not installed.
      */
@@ -63,7 +73,8 @@ class get_assign_submissions extends state_function {
         int $limit = source::DEFAULT_LIMIT,
         array $ids = [],
         array $courseids = [],
-        array $coursemoduleids = []
+        array $coursemoduleids = [],
+        bool $includedetail = false
     ): array {
         global $DB;
 
@@ -73,12 +84,14 @@ class get_assign_submissions extends state_function {
             'ids' => $ids,
             'courseids' => $courseids,
             'coursemoduleids' => $coursemoduleids,
+            'includedetail' => $includedetail,
         ] = self::validate_parameters(self::execute_parameters(), [
             'after' => $after,
             'limit' => $limit,
             'ids' => $ids,
             'courseids' => $courseids,
             'coursemoduleids' => $coursemoduleids,
+            'includedetail' => $includedetail,
         ]);
         $context = \core\context\system::instance();
         self::validate_context($context);
@@ -89,11 +102,11 @@ class get_assign_submissions extends state_function {
         }
         $courseids = self::check_filter($ids, $courseids);
         $coursemoduleids = self::check_filter($ids, $coursemoduleids);
-        $source = new assign_submissions($DB, $courseids, $coursemoduleids);
+        $source = new assign_submissions($DB, $courseids, $coursemoduleids, $includedetail);
         if (!$source->is_installed()) {
             throw new moodle_exception('module_not_installed', 'local_arcs', '', $source->modname());
         }
-        $page = self::read($source, $after, $limit, $ids);
+        $page = self::read($source, $after, $limit, $ids, $includedetail);
         return ['assignsubmissions' => $page['rows'], 'next' => $page['next']];
     }
 
@@ -166,6 +179,44 @@ class get_assign_submissions extends state_function {
                 null,
                 NULL_ALLOWED
             ),
+            'gradingdefinitionid' => new external_value(
+                PARAM_INT,
+                'The rubric or marking guide the grade was given with; null without one, or when grade is null. ' .
+                    'Only with includedetail',
+                VALUE_OPTIONAL,
+                null,
+                NULL_ALLOWED
+            ),
+            'fillings' => new external_multiple_structure(
+                self::filling_structure(),
+                'How each of the definition\'s criteria was marked, in criterion order; only with includedetail',
+                VALUE_OPTIONAL
+            ),
         ]));
+    }
+
+    /**
+     * Describes one filling: how one criterion of a rubric or marking guide was marked.
+     *
+     * @return external_single_structure
+     */
+    private static function filling_structure(): external_single_structure {
+        return new external_single_structure([
+            'criterionid' => new external_value(PARAM_INT, 'The criterion (see local_arcs_get_grading_definitions)'),
+            'levelid' => new external_value(
+                PARAM_INT,
+                'The rubric level chosen; null for a marking guide, or when no level is chosen or it was deleted',
+                VALUE_REQUIRED,
+                null,
+                NULL_ALLOWED
+            ),
+            'score' => new external_value(
+                PARAM_FLOAT,
+                'The score: the chosen level\'s for a rubric (null without a level), the one given for a marking guide',
+                VALUE_REQUIRED,
+                null,
+                NULL_ALLOWED
+            ),
+        ]);
     }
 }

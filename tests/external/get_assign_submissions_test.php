@@ -54,6 +54,7 @@ final class get_assign_submissions_test extends \advanced_testcase {
      * @param int[] $ids Ids to fetch.
      * @param int[] $courseids Courses whose submissions to fetch.
      * @param int[] $cmids Assignments, by course module, whose submissions to fetch.
+     * @param bool $includedetail Whether to fetch each graded submission's fillings.
      * @return array
      */
     private function call(
@@ -61,13 +62,104 @@ final class get_assign_submissions_test extends \advanced_testcase {
         int $limit = source::DEFAULT_LIMIT,
         array $ids = [],
         array $courseids = [],
-        array $cmids = []
+        array $cmids = [],
+        bool $includedetail = false
     ): array {
         $this->set_exporter();
         return external_api::clean_returnvalue(
             get_assign_submissions::execute_returns(),
-            get_assign_submissions::execute($after, $limit, $ids, $courseids, $cmids)
+            get_assign_submissions::execute($after, $limit, $ids, $courseids, $cmids, $includedetail)
         );
+    }
+
+    /**
+     * The submissions in a page fetched with includedetail.
+     *
+     * @return array[]
+     */
+    private function detail(): array {
+        return $this->call(0, source::DEFAULT_LIMIT, [], [], [], true)['assignsubmissions'];
+    }
+
+    /**
+     * Makes a two-criterion rubric the assignment's grading method, as the rubric editor does.
+     *
+     * @param \assign $assign The assignment.
+     * @return \gradingform_rubric_controller
+     */
+    private function rubric(\assign $assign): \gradingform_rubric_controller {
+        $this->setAdminUser();
+        return $this->getDataGenerator()->get_plugin_generator('gradingform_rubric')->create_instance(
+            $assign->get_context(),
+            'mod_assign',
+            'submissions',
+            'Rubric',
+            '',
+            [
+                'Spelling' => ['Many mistakes' => 0, 'Few mistakes' => 3, 'No mistakes' => 5],
+                'Pictures' => ['None' => 0, 'Some' => 5],
+            ]
+        );
+    }
+
+    /**
+     * Makes a two-criterion marking guide the assignment's grading method, as the guide editor does.
+     *
+     * @param \assign $assign The assignment.
+     * @return \gradingform_guide_controller
+     */
+    private function guide(\assign $assign): \gradingform_guide_controller {
+        $this->setAdminUser();
+        $criterion = ['description' => 'For students', 'descriptionmarkers' => 'For markers', 'maxscore' => 10];
+        return $this->getDataGenerator()->get_plugin_generator('gradingform_guide')->create_instance(
+            $assign->get_context(),
+            'mod_assign',
+            'submissions',
+            'Guide',
+            '',
+            ['Spelling' => $criterion, 'Pictures' => $criterion]
+        );
+    }
+
+    /**
+     * Grades the student's latest attempt with the assignment's rubric or marking guide, as the grading form does.
+     *
+     * @param \assign $assign The assignment.
+     * @param \stdClass $student The student.
+     * @param \gradingform_controller $controller The rubric or guide.
+     * @param float[] $scores The score for each criterion, by criterion name; for a rubric, the chosen level's.
+     * @param array $data Other form data, such as workflowstate.
+     */
+    private function grade_with(
+        \assign $assign,
+        \stdClass $student,
+        \gradingform_controller $controller,
+        array $scores,
+        array $data = []
+    ): void {
+        $method = $controller instanceof \gradingform_rubric_controller ? 'rubric' : 'guide';
+        $generator = $this->getDataGenerator()->get_plugin_generator('gradingform_' . $method);
+        $values = array_map(fn(float $score): array => ['score' => $score, 'remark' => 'Remark'], $scores);
+        $form = $generator->get_submitted_form_data($controller, 0, $values);
+        $this->grade($assign, $student, 0, $data + ['advancedgrading' => $form]);
+    }
+
+    /**
+     * A rubric's criterion and level ids, by criterion description and level score.
+     *
+     * @param \gradingform_rubric_controller $controller The rubric.
+     * @return array[] [criterion description => ['id' => int, 'levels' => [score => level id]]]
+     */
+    private function rubric_ids(\gradingform_rubric_controller $controller): array {
+        $ids = [];
+        foreach ($controller->get_definition(true)->rubric_criteria as $criterion) {
+            $levels = [];
+            foreach ($criterion['levels'] as $level) {
+                $levels[(int) $level['score']] = (int) $level['id'];
+            }
+            $ids[$criterion['description']] = ['id' => (int) $criterion['id'], 'levels' => $levels];
+        }
+        return $ids;
     }
 
     /**
@@ -330,6 +422,235 @@ final class get_assign_submissions_test extends \advanced_testcase {
         $rows = $this->call()['assignsubmissions'];
 
         $this->assertEqualsCanonicalizing([(int) $one->id, (int) $two->id], array_column($rows, 'userid'));
+    }
+
+    /**
+     * Without includedetail, submissions carry no grading definition or fillings.
+     */
+    public function test_execute_without_detail_has_no_fillings(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $assign = $this->assign($course);
+        $rubric = $this->rubric($assign);
+        $this->submit($assign, $student);
+        $this->grade_with($assign, $student, $rubric, ['Spelling' => 5, 'Pictures' => 0]);
+
+        $row = $this->call()['assignsubmissions'][0];
+
+        $this->assertArrayNotHasKey('gradingdefinitionid', $row);
+        $this->assertArrayNotHasKey('fillings', $row);
+    }
+
+    /**
+     * With includedetail, a submission graded with a rubric carries the level chosen for each criterion.
+     */
+    public function test_execute_rubric_fillings(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $assign = $this->assign($course);
+        $rubric = $this->rubric($assign);
+        $this->submit($assign, $student);
+        $this->grade_with($assign, $student, $rubric, ['Spelling' => 3, 'Pictures' => 5]);
+        $ids = $this->rubric_ids($rubric);
+
+        $row = $this->detail()[0];
+
+        $this->assertSame(80.0, $row['grade']);
+        $this->assertSame((int) $rubric->get_definition()->id, $row['gradingdefinitionid']);
+        $this->assertSame([
+            ['criterionid' => $ids['Spelling']['id'], 'levelid' => $ids['Spelling']['levels'][3], 'score' => 3.0],
+            ['criterionid' => $ids['Pictures']['id'], 'levelid' => $ids['Pictures']['levels'][5], 'score' => 5.0],
+        ], $row['fillings']);
+    }
+
+    /**
+     * With includedetail, a submission graded with a marking guide carries the score given for each criterion.
+     */
+    public function test_execute_guide_fillings(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $assign = $this->assign($course);
+        $guide = $this->guide($assign);
+        $this->submit($assign, $student);
+        $this->grade_with($assign, $student, $guide, ['Spelling' => 7.5, 'Pictures' => 4]);
+        $criteria = array_column($guide->get_definition(true)->guide_criteria, 'id', 'shortname');
+
+        $row = $this->detail()[0];
+
+        $this->assertSame((int) $guide->get_definition()->id, $row['gradingdefinitionid']);
+        $this->assertSame([
+            ['criterionid' => (int) $criteria['Spelling'], 'levelid' => null, 'score' => 7.5],
+            ['criterionid' => (int) $criteria['Pictures'], 'levelid' => null, 'score' => 4.0],
+        ], $row['fillings']);
+    }
+
+    /**
+     * Simple direct grading, and a submission not yet graded, carry no definition and no fillings.
+     */
+    public function test_execute_detail_without_advanced_grading(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $one = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $two = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $simple = $this->assign($course);
+        $this->submit($simple, $one);
+        $this->grade($simple, $one, 50);
+        $rubric = $this->assign($course);
+        $this->rubric($rubric);
+        $this->submit($rubric, $two);
+
+        $rows = $this->detail();
+
+        $this->assertCount(2, $rows);
+        foreach ($rows as $row) {
+            $this->assertNull($row['gradingdefinitionid']);
+            $this->assertSame([], $row['fillings']);
+        }
+    }
+
+    /**
+     * Fillings are withheld with the grade: under a marking workflow until released, and under blind
+     * marking until identities are revealed.
+     */
+    public function test_execute_detail_withheld(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $one = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $two = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $workflow = $this->assign($course, ['markingworkflow' => 1]);
+        $workflowrubric = $this->rubric($workflow);
+        $this->submit($workflow, $one);
+        $this->grade_with($workflow, $one, $workflowrubric, ['Spelling' => 5, 'Pictures' => 5], [
+            'workflowstate' => 'readyforrelease',
+        ]);
+        $blind = $this->assign($course, ['blindmarking' => 1]);
+        $blindrubric = $this->rubric($blind);
+        $this->submit($blind, $two);
+        $this->grade_with($blind, $two, $blindrubric, ['Spelling' => 5, 'Pictures' => 5]);
+
+        foreach ($this->detail() as $row) {
+            $this->assertNull($row['grade']);
+            $this->assertNull($row['gradingdefinitionid']);
+            $this->assertSame([], $row['fillings']);
+        }
+
+        $this->grade_with($workflow, $one, $workflowrubric, ['Spelling' => 5, 'Pictures' => 5], [
+            'workflowstate' => 'released',
+        ]);
+        $this->setAdminUser();
+        $blind->reveal_identities();
+
+        foreach ($this->detail() as $row) {
+            $this->assertSame(100.0, $row['grade']);
+            $this->assertCount(2, $row['fillings']);
+        }
+    }
+
+    /**
+     * Regrading returns only the current fillings, not the archived ones.
+     */
+    public function test_execute_detail_regrade(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $assign = $this->assign($course);
+        $rubric = $this->rubric($assign);
+        $this->submit($assign, $student);
+        $this->grade_with($assign, $student, $rubric, ['Spelling' => 0, 'Pictures' => 0]);
+        $this->grade_with($assign, $student, $rubric, ['Spelling' => 5, 'Pictures' => 0]);
+        $this->assertSame(2, $DB->count_records('grading_instances'));
+
+        $fillings = $this->detail()[0]['fillings'];
+
+        $this->assertSame([5.0, 0.0], array_column($fillings, 'score'));
+    }
+
+    /**
+     * After the rubric is edited and its grades marked for regrading, the fillings are still returned;
+     * a filling whose level was deleted has no level and no score.
+     */
+    public function test_execute_detail_rubric_edited_after_grading(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $assign = $this->assign($course);
+        $rubric = $this->rubric($assign);
+        $this->submit($assign, $student);
+        $this->grade_with($assign, $student, $rubric, ['Spelling' => 3, 'Pictures' => 5]);
+        $ids = $this->rubric_ids($rubric);
+
+        $definition = $rubric->get_definition_for_editing();
+        unset($definition->rubric['criteria'][$ids['Spelling']['id']]['levels'][$ids['Spelling']['levels'][3]]);
+        $definition->rubric['regrade'] = 1;
+        $rubric->update_definition($definition);
+        $this->assertTrue($DB->record_exists('grading_instances', ['status' => \gradingform_instance::INSTANCE_STATUS_NEEDUPDATE]));
+
+        $this->assertSame([
+            ['criterionid' => $ids['Spelling']['id'], 'levelid' => null, 'score' => null],
+            ['criterionid' => $ids['Pictures']['id'], 'levelid' => $ids['Pictures']['levels'][5], 'score' => 5.0],
+        ], $this->detail()[0]['fillings']);
+    }
+
+    /**
+     * Only the fillings of the assignment's active grading method are returned.
+     */
+    public function test_execute_detail_after_method_switch(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $assign = $this->assign($course);
+        $rubric = $this->rubric($assign);
+        $this->submit($assign, $student);
+        $this->grade_with($assign, $student, $rubric, ['Spelling' => 3, 'Pictures' => 5]);
+
+        get_grading_manager($assign->get_context(), 'mod_assign', 'submissions')->set_active_method('');
+
+        $row = $this->detail()[0];
+        $this->assertSame(80.0, $row['grade']);
+        $this->assertNull($row['gradingdefinitionid']);
+        $this->assertSame([], $row['fillings']);
+    }
+
+    /**
+     * In a team submission graded for the whole team, each member's row carries its own fillings.
+     */
+    public function test_execute_detail_team_submission(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $one = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $two = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $group = $this->getDataGenerator()->create_group(['courseid' => $course->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group->id, 'userid' => $one->id]);
+        $this->getDataGenerator()->create_group_member(['groupid' => $group->id, 'userid' => $two->id]);
+        $assign = $this->assign($course, ['teamsubmission' => 1]);
+        $rubric = $this->rubric($assign);
+        $this->submit($assign, $one);
+        $this->grade_with($assign, $one, $rubric, ['Spelling' => 3, 'Pictures' => 5], ['applytoall' => 1]);
+
+        $rows = $this->detail();
+
+        $this->assertCount(2, $rows);
+        foreach ($rows as $row) {
+            $this->assertSame((int) $rubric->get_definition()->id, $row['gradingdefinitionid']);
+            $this->assertSame([3.0, 5.0], array_column($row['fillings'], 'score'));
+        }
+    }
+
+    /**
+     * With includedetail, a page holds at most DETAIL_MAX_LIMIT submissions, and more ids are refused.
+     */
+    public function test_execute_detail_page_size(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(get_string('limit_exceeded', 'local_arcs', source::DETAIL_MAX_LIMIT));
+        get_assign_submissions::execute(0, source::DEFAULT_LIMIT, range(1, source::DETAIL_MAX_LIMIT + 1), [], [], true);
     }
 
     /**

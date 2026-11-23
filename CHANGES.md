@@ -12,6 +12,13 @@ Additions to contract version 1; nothing changes meaning.
   mark and state. Pages with detail hold at most 100 attempts.
 - A `quiz_grading` change is also recorded when a quiz's sections are edited, and, for each
   quiz with attempts at it, when a question is renamed in the question bank.
+- `local_arcs_get_assign_submissions` takes `includedetail` too. With it, each submission
+  graded with a rubric or marking guide carries its `gradingdefinitionid` and `fillings`: the
+  level chosen or score given for each criterion. Pages with detail hold at most 100
+  submissions.
+- New function `local_arcs_get_grading_definitions`: assignments' rubrics and marking guides,
+  with their criteria, rubric levels and marking guide maximum scores. An `assign_grading`
+  change also means refetching the assignment's definitions.
 
 ## 1.0.1 (2026-11-12)
 

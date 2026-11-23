@@ -25,6 +25,12 @@ namespace local_arcs\local\source;
  * workflow, before the user's grade is released. The rows of team submissions that belong to the
  * group (userid 0) and submissions to assignments on the site course are left out.
  *
+ * When asked for detail, each submission with a grade also carries how the grade was reached with a
+ * rubric or marking guide: the grading definition, and the level chosen or score given for each of
+ * its criteria. These come from the current grading instance (active, or needing an update after the
+ * definition was edited) of the assignment's active grading method for the submission's grade.
+ * Remarks and overall feedback are never read.
+ *
  * @package    local_arcs
  * @copyright  2026 Arcs Learning
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -32,6 +38,15 @@ namespace local_arcs\local\source;
 class assign_submissions extends attempts {
     /** @var string The marking workflow state of a released grade (ASSIGN_MARKING_WORKFLOW_STATE_RELEASED). */
     private const RELEASED = 'released';
+
+    /** @var int A grading instance in use (gradingform_instance::INSTANCE_STATUS_ACTIVE). */
+    private const INSTANCE_ACTIVE = 1;
+
+    /**
+     * @var int A grading instance still in use, whose definition was edited after grading
+     *     (gradingform_instance::INSTANCE_STATUS_NEEDUPDATE).
+     */
+    private const INSTANCE_NEEDUPDATE = 2;
 
     /** @var bool Whether assign_grades has penalty (grade penalties, from Moodle 5.0). */
     private bool $haspenalty;
@@ -42,8 +57,15 @@ class assign_submissions extends attempts {
      * @param \moodle_database $db The database.
      * @param int[] $courseids Only read submissions in these courses; empty for all.
      * @param int[] $coursemoduleids Only read submissions to these course modules; empty for all.
+     * @param bool $includedetail Whether to read each graded submission's rubric or marking guide fillings.
      */
-    public function __construct(\moodle_database $db, array $courseids = [], array $coursemoduleids = []) {
+    public function __construct(
+        \moodle_database $db,
+        array $courseids = [],
+        array $coursemoduleids = [],
+        /** @var bool Whether to read each graded submission's rubric or marking guide fillings. */
+        private bool $includedetail = false,
+    ) {
         parent::__construct($db, $courseids, $coursemoduleids);
         $this->haspenalty = array_key_exists('penalty', $db->get_columns('assign_grades'));
     }
@@ -65,7 +87,7 @@ class assign_submissions extends attempts {
     protected function fields(): string {
         return 's.id, s.userid, cm.id AS coursemoduleid, s.attemptnumber, s.status, s.timecreated, s.timemodified, ' .
             's.timestarted, a.grade AS assigngrade, a.blindmarking, a.revealidentities, a.markinganonymous, ' .
-            'a.markingworkflow, f.workflowstate, g.grade, g.timemodified AS timegraded' .
+            'a.markingworkflow, f.workflowstate, g.id AS gradeid, g.grade, g.timemodified AS timegraded' .
             ($this->haspenalty ? ', g.penalty' : '');
     }
 
@@ -110,11 +132,18 @@ class assign_submissions extends attempts {
      * @return array[]
      */
     protected function shape(array $records): array {
+        $grades = [];
+        foreach ($records as $record) {
+            $grade = $this->released($record) ? $this->grade($record->grade, (int) $record->assigngrade) : null;
+            $grades[$record->id] = $grade;
+        }
+        $instances = $this->includedetail ? $this->instances($records, $grades) : [];
+
         $rows = [];
         foreach ($records as $record) {
             $assigngrade = (int) $record->assigngrade;
-            $grade = $this->released($record) ? $this->grade($record->grade, $assigngrade) : null;
-            $rows[] = [
+            $grade = $grades[$record->id];
+            $row = [
                 'id' => (int) $record->id,
                 'userid' => (int) $record->userid,
                 'coursemoduleid' => (int) $record->coursemoduleid,
@@ -130,8 +159,108 @@ class assign_submissions extends attempts {
                 'timegraded' => $grade !== null ? (int) $record->timegraded : null,
                 'passed' => null,
             ];
+            if ($this->includedetail) {
+                $instance = $grade !== null ? ($instances[$record->gradeid] ?? null) : null;
+                $row['gradingdefinitionid'] = $instance['definitionid'] ?? null;
+                $row['fillings'] = $instance['fillings'] ?? [];
+            }
+            $rows[] = $row;
         }
         return $rows;
+    }
+
+    /**
+     * Reads the current rubric and marking guide instances of a page's released grades, with their fillings.
+     *
+     * A method's tables are read only while its plugin is installed: uninstalling it drops them, along
+     * with its definitions and instances.
+     *
+     * @param \stdClass[] $records The submissions, with their grade's id.
+     * @param array $grades The grade each submission returns, keyed by submission id; null when none.
+     * @return array[] Keyed by grade id: 'definitionid', and 'fillings' in criterion order.
+     */
+    private function instances(array $records, array $grades): array {
+        $gradeids = [];
+        foreach ($records as $record) {
+            if ($grades[$record->id] !== null) {
+                $gradeids[] = (int) $record->gradeid;
+            }
+        }
+        if (!$gradeids) {
+            return [];
+        }
+
+        $tables = $this->db->get_tables();
+        $instances = [];
+        if (isset($tables['gradingform_rubric_fillings'])) {
+            $instances += $this->read_instances('rubric', $gradeids);
+        }
+        if (isset($tables['gradingform_guide_fillings'])) {
+            $instances += $this->read_instances('guide', $gradeids);
+        }
+        return $instances;
+    }
+
+    /**
+     * Reads one method's current instances for some grades, with their fillings.
+     *
+     * Only the instance of the area's active method counts, as assign shows it. Fillings for a
+     * criterion that a later edit deleted are left out, as Moodle no longer shows them; a rubric
+     * filling whose level was deleted has no level.
+     *
+     * @param string $method rubric or guide.
+     * @param int[] $gradeids The grades (assign_grades ids, the instances' item ids).
+     * @return array[] Keyed by grade id: 'definitionid', and 'fillings' in criterion order.
+     */
+    private function read_instances(string $method, array $gradeids): array {
+        if ($method === 'rubric') {
+            $fillingfields = 'l.id AS levelid, l.score';
+            $fillingjoins = 'LEFT JOIN {gradingform_rubric_fillings} fl ON fl.instanceid = gi.id
+                             LEFT JOIN {gradingform_rubric_criteria} c ON c.id = fl.criterionid
+                             LEFT JOIN {gradingform_rubric_levels} l ON l.id = fl.levelid AND l.criterionid = c.id';
+        } else {
+            $fillingfields = 'fl.score';
+            $fillingjoins = 'LEFT JOIN {gradingform_guide_fillings} fl ON fl.instanceid = gi.id
+                             LEFT JOIN {gradingform_guide_criteria} c ON c.id = fl.criterionid';
+        }
+        [$itemsql, $params] = $this->db->get_in_or_equal($gradeids, SQL_PARAMS_NAMED, 'item');
+        $sql = "SELECT fl.id AS fillingid, gi.id AS instanceid, gi.itemid, gi.definitionid, c.id AS criterionid,
+                       c.sortorder, $fillingfields
+                  FROM {grading_instances} gi
+                  JOIN {grading_definitions} d ON d.id = gi.definitionid
+                  JOIN {grading_areas} ga ON ga.id = d.areaid
+                       $fillingjoins
+                 WHERE gi.itemid $itemsql
+                   AND gi.status IN (:active, :needupdate)
+                   AND d.method = :method
+                   AND ga.activemethod = :activemethod
+                   AND ga.component = :component
+                   AND ga.areaname = :areaname
+              ORDER BY gi.itemid, c.sortorder, c.id";
+        $params += [
+            'active' => self::INSTANCE_ACTIVE,
+            'needupdate' => self::INSTANCE_NEEDUPDATE,
+            'method' => $method,
+            'activemethod' => $method,
+            'component' => 'mod_assign',
+            'areaname' => 'submissions',
+        ];
+
+        $instances = [];
+        $rs = $this->db->get_recordset_sql($sql, $params);
+        foreach ($rs as $filling) {
+            $instances[$filling->itemid] ??= ['definitionid' => (int) $filling->definitionid, 'fillings' => []];
+            if ($filling->criterionid === null) {
+                continue;
+            }
+            $instances[$filling->itemid]['fillings'][] = [
+                'criterionid' => (int) $filling->criterionid,
+                'levelid' => $method === 'rubric' && $filling->levelid !== null ? (int) $filling->levelid : null,
+                'score' => $filling->score === null ? null : (float) $filling->score,
+            ];
+        }
+        $rs->close();
+        return $instances;
     }
 
     /**
