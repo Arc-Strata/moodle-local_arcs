@@ -279,6 +279,26 @@ $observers = [
         'internal' => false,
     ],
     [
+        'eventname' => \mod_quiz\event\section_title_updated::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_grading_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\section_break_created::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_grading_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \mod_quiz\event\section_break_deleted::class,
+        'callback' => [\local_arcs\observer::class, 'quiz_grading_changed'],
+        'internal' => false,
+    ],
+    [
+        'eventname' => \core\event\question_updated::class,
+        'callback' => [\local_arcs\observer::class, 'question_updated'],
+        'internal' => false,
+    ],
+    [
         'eventname' => \mod_h5pactivity\event\statement_received::class,
         'callback' => [\local_arcs\observer::class, 'h5pactivity_statement_received'],
         'internal' => false,

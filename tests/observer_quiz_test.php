@@ -27,6 +27,7 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/reportlib.php');
 require_once($CFG->dirroot . '/mod/quiz/report/overview/report.php');
 require_once($CFG->dirroot . '/mod/quiz/report/overview/overview_form.php');
+require_once($CFG->dirroot . '/question/bank/viewquestionname/lib.php');
 
 #[\PHPUnit\Framework\Attributes\CoversClass(observer::class)]
 /**
@@ -257,6 +258,62 @@ final class observer_quiz_test extends \advanced_testcase {
         $this->clear_changes();
         $calculator->update_quiz_maximum_grade(50);
         $this->assertSame([$grading], $this->changes_of('quiz_grading'));
+    }
+
+    /**
+     * Adding, retitling and removing a quiz section record a quiz_grading upsert for the quiz: every
+     * attempt shows its slots' sections.
+     */
+    public function test_section_edits_record_quiz_grading(): void {
+        $quiz = $this->generator()->create_test_quiz(
+            [['TF1', 1, 'truefalse'], ['TF2', 2, 'truefalse']],
+            ['course' => $this->course->id]
+        );
+        $grading = $this->change('quiz_grading', (int) $quiz->get_cmid(), 'upsert', null, (int) $this->course->id);
+        $structure = $quiz->get_structure();
+
+        $this->clear_changes();
+        $id = $structure->add_section_heading(2, 'Part B');
+        $this->assertSame([$grading], $this->changes_of('quiz_grading'));
+
+        $this->clear_changes();
+        $structure->set_section_heading($id, 'Part two');
+        $this->assertSame([$grading], $this->changes_of('quiz_grading'));
+
+        $this->clear_changes();
+        $structure->remove_section_heading($id);
+        $this->assertSame([$grading], $this->changes_of('quiz_grading'));
+    }
+
+    /**
+     * Renaming a question in the question bank records a quiz_grading upsert for each quiz with
+     * attempts at it: the name is on every attempt's slot. Quizzes with only previews of it, or no
+     * attempts, record nothing.
+     */
+    public function test_question_renamed(): void {
+        $this->finish($this->start());
+        $attempted = (int) $this->quiz->get_structure()->get_question_in_slot(1)->questionid;
+        $previewed = $this->generator()->create_test_quiz([['TF3', 1, 'truefalse']], ['course' => $this->course->id]);
+        $unattempted = $this->generator()->create_test_quiz([['TF4', 1, 'truefalse']], ['course' => $this->course->id]);
+        $this->setAdminUser();
+        quiz_prepare_and_start_new_attempt(quiz_settings::create($previewed->get_quizid()), 1, null);
+
+        $this->clear_changes();
+        qbank_viewquestionname_inplace_editable('questionname', $attempted, 'Renamed');
+        $this->assertSame(
+            [$this->change('quiz_grading', (int) $this->quiz->get_cmid(), 'upsert', null, (int) $this->course->id)],
+            $this->changes_of('quiz_grading')
+        );
+
+        $this->clear_changes();
+        foreach ([$previewed, $unattempted] as $quiz) {
+            qbank_viewquestionname_inplace_editable(
+                'questionname',
+                (int) $quiz->get_structure()->get_question_in_slot(1)->questionid,
+                'Renamed'
+            );
+        }
+        $this->assertSame([], $this->changes_of('quiz_grading'));
     }
 
     /**

@@ -35,6 +35,12 @@ abstract class source {
     public const MAX_LIMIT = 1000;
 
     /**
+     * @var int Most rows, or ids, in one call that asks for each row's detail (such as a quiz attempt's
+     *     slots), which can be many times the size of the row.
+     */
+    public const DETAIL_MAX_LIMIT = 100;
+
+    /**
      * Constructor.
      *
      * @param \moodle_database $db The database.

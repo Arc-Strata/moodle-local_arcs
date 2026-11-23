@@ -21,6 +21,7 @@ use core\exception\moodle_exception;
 use core_external\external_api;
 use local_arcs\local\source\source;
 use local_arcs\tests\exporter_trait;
+use mod_quiz\quiz_attempt;
 use mod_quiz\quiz_settings;
 
 defined('MOODLE_INTERNAL') || die();
@@ -51,6 +52,7 @@ final class get_quiz_attempts_test extends \advanced_testcase {
      * @param int[] $ids Ids to fetch.
      * @param int[] $courseids Courses whose attempts to fetch.
      * @param int[] $cmids Quizzes, by course module, whose attempts to fetch.
+     * @param bool $includedetail Whether to fetch each attempt's slots.
      * @return array
      */
     private function call(
@@ -58,12 +60,69 @@ final class get_quiz_attempts_test extends \advanced_testcase {
         int $limit = source::DEFAULT_LIMIT,
         array $ids = [],
         array $courseids = [],
-        array $cmids = []
+        array $cmids = [],
+        bool $includedetail = false
     ): array {
         return external_api::clean_returnvalue(
             get_quiz_attempts::execute_returns(),
-            get_quiz_attempts::execute($after, $limit, $ids, $courseids, $cmids)
+            get_quiz_attempts::execute($after, $limit, $ids, $courseids, $cmids, $includedetail)
         );
+    }
+
+    /**
+     * Calls the function with detail, and returns the attempts.
+     *
+     * @param int[] $ids Ids to fetch; empty for all.
+     * @return array[]
+     */
+    private function call_with_detail(array $ids = []): array {
+        return $this->call(0, source::DEFAULT_LIMIT, $ids, [], [], true)['quizattempts'];
+    }
+
+    /**
+     * The question in a quiz's slot.
+     *
+     * @param quiz_settings $quiz The quiz.
+     * @param int $slot The slot.
+     * @return int The question id.
+     */
+    private function questionid(quiz_settings $quiz, int $slot): int {
+        return (int) $quiz->get_structure()->get_question_in_slot($slot)->questionid;
+    }
+
+    /**
+     * An expected slot of a true/false question marked out of 1.
+     *
+     * @param int $slot The slot.
+     * @param int $questionid The question.
+     * @param string $questionname The question's name.
+     * @param int $sectionfirstslot The first slot of its section.
+     * @param string $sectionheading Its section's heading.
+     * @param float|null $fraction The fraction awarded.
+     * @param string $state The question's state.
+     * @return array
+     */
+    private function slot(
+        int $slot,
+        int $questionid,
+        string $questionname,
+        int $sectionfirstslot,
+        string $sectionheading,
+        ?float $fraction,
+        string $state
+    ): array {
+        return [
+            'slot' => $slot,
+            'questionid' => $questionid,
+            'questionname' => $questionname,
+            'sectionfirstslot' => $sectionfirstslot,
+            'sectionheading' => $sectionheading,
+            'maxmark' => 1.0,
+            'minfraction' => 0.0,
+            'maxfraction' => 1.0,
+            'fraction' => $fraction,
+            'state' => $state,
+        ];
     }
 
     /**
@@ -153,6 +212,143 @@ final class get_quiz_attempts_test extends \advanced_testcase {
         $this->assertSame(0, $rows[1]['timefinish']);
         $this->assertNull($rows[1]['sumgrades']);
         $this->assertNull($rows[1]['grade']);
+    }
+
+    /**
+     * Without includedetail, attempts carry no slots.
+     */
+    public function test_execute_without_detail_has_no_slots(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $this->attempt($this->quiz($this->getDataGenerator()->create_course()));
+
+        $this->assertArrayNotHasKey('slots', $this->call()['quizattempts'][0]);
+    }
+
+    /**
+     * With includedetail, each attempt carries its slots in order: the question in each, the section
+     * it is in, and its mark and state from the latest step. An attempt in progress has no marks yet.
+     */
+    public function test_execute_returns_slots(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        /** @var \mod_quiz_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_quiz');
+        $quiz = $generator->create_test_quiz(
+            ['Part A', ['TF1', 1, 'truefalse'], ['TF2', 1, 'truefalse'], 'Part B', ['TF3', 2, 'truefalse']],
+            ['course' => $this->getDataGenerator()->create_course()->id]
+        );
+        $user = $this->getDataGenerator()->create_user();
+        $finished = quiz_prepare_and_start_new_attempt($quiz, 1, null, false, [], [], $user->id);
+        $generator->submit_responses($finished->id, [1 => 'True', 2 => 'False', 3 => 'True'], false, true);
+        $this->attempt($quiz, false);
+        [$q1, $q2, $q3] = [$this->questionid($quiz, 1), $this->questionid($quiz, 2), $this->questionid($quiz, 3)];
+
+        $rows = $this->call_with_detail();
+
+        $this->assertSame([
+            $this->slot(1, $q1, 'TF1', 1, 'Part A', 1.0, 'gradedright'),
+            $this->slot(2, $q2, 'TF2', 1, 'Part A', 0.0, 'gradedwrong'),
+            $this->slot(3, $q3, 'TF3', 3, 'Part B', 1.0, 'gradedright'),
+        ], $rows[0]['slots']);
+        $this->assertSame([
+            $this->slot(1, $q1, 'TF1', 1, 'Part A', null, 'todo'),
+            $this->slot(2, $q2, 'TF2', 1, 'Part A', null, 'todo'),
+            $this->slot(3, $q3, 'TF3', 3, 'Part B', null, 'todo'),
+        ], $rows[1]['slots']);
+    }
+
+    /**
+     * An essay has no mark until it is graded by hand; then its slot has the mark and a manual state.
+     * The section of a quiz without headings has an empty heading.
+     */
+    public function test_execute_slot_of_manually_graded_essay(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        /** @var \mod_quiz_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_quiz');
+        $quiz = $generator->create_test_quiz(
+            [['Essay', 1, 'essay']],
+            ['course' => $this->getDataGenerator()->create_course()->id, 'preferredbehaviour' => 'deferredfeedback']
+        );
+        $user = $this->getDataGenerator()->create_user();
+        $id = (int) quiz_prepare_and_start_new_attempt($quiz, 1, null, false, [], [], $user->id)->id;
+        $generator->submit_responses($id, [1 => 'An answer'], false, true);
+        $essay = $this->slot(1, $this->questionid($quiz, 1), 'Essay', 1, '', null, 'needsgrading');
+
+        $this->assertSame([$essay], $this->call_with_detail()[0]['slots']);
+
+        $attempt = quiz_attempt::create($id);
+        $attempt->get_question_usage()->manual_grade(1, 'Good', 1, FORMAT_HTML);
+        \question_engine::save_questions_usage_by_activity($attempt->get_question_usage());
+
+        $this->assertSame(
+            [array_merge($essay, ['fraction' => 1.0, 'state' => 'mangrright'])],
+            $this->call_with_detail()[0]['slots']
+        );
+    }
+
+    /**
+     * A question's new mark is in existing attempts' slots on refetch.
+     */
+    public function test_execute_slot_mark_change(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $quiz = $this->quiz($this->getDataGenerator()->create_course());
+        $this->attempt($quiz);
+        $structure = $quiz->get_structure();
+
+        $structure->update_slot_maxmark($structure->get_slot_by_number(1), 3);
+
+        $this->assertSame([3.0, 1.0], array_column($this->call_with_detail()[0]['slots'], 'maxmark'));
+    }
+
+    /**
+     * With includedetail, each page and each ids fetch carries its own attempts' slots.
+     */
+    public function test_execute_pages_and_ids_with_detail(): void {
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $quiz = $this->quiz($this->getDataGenerator()->create_course());
+        $one = $this->attempt($quiz);
+        $two = $this->attempt($quiz, false);
+
+        $page1 = $this->call(0, 1, [], [], [], true);
+        $page2 = $this->call($page1['next'], 1, [], [], [], true);
+
+        $this->assertSame([$one], $this->ids($page1));
+        $this->assertSame(['gradedright', 'gradedwrong'], array_column($page1['quizattempts'][0]['slots'], 'state'));
+        $this->assertSame([$two], $this->ids($page2));
+        $this->assertSame(['todo', 'todo'], array_column($page2['quizattempts'][0]['slots'], 'state'));
+        $this->assertSame(['todo', 'todo'], array_column($this->call_with_detail([$two])[0]['slots'], 'state'));
+    }
+
+    /**
+     * With includedetail, a page holds at most DETAIL_MAX_LIMIT attempts whatever limit says, and
+     * more ids than that are refused.
+     */
+    public function test_execute_detail_page_size(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->set_exporter();
+        $quiz = $this->quiz($this->getDataGenerator()->create_course());
+        // Attempt rows without questions are enough to count a page, and far quicker than real attempts.
+        $ids = [];
+        for ($n = 1; $n <= source::DETAIL_MAX_LIMIT + 1; $n++) {
+            $ids[] = (int) $DB->insert_record('quiz_attempts', [
+                'quiz' => $quiz->get_quizid(), 'userid' => $n + 100, 'attempt' => 1, 'uniqueid' => -$n,
+                'layout' => '', 'state' => 'inprogress', 'timestart' => 1, 'timefinish' => 0, 'timemodified' => 1,
+            ]);
+        }
+
+        $page = $this->call(0, source::MAX_LIMIT, [], [], [], true);
+
+        $this->assertCount(source::DETAIL_MAX_LIMIT, $page['quizattempts']);
+        $this->assertSame($ids[source::DETAIL_MAX_LIMIT - 1], $page['next']);
+        $this->assertCount(source::DETAIL_MAX_LIMIT + 1, $this->call(0, source::MAX_LIMIT)['quizattempts']);
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(get_string('limit_exceeded', 'local_arcs', source::DETAIL_MAX_LIMIT));
+        $this->call(0, source::MAX_LIMIT, $ids, [], [], true);
     }
 
     /**

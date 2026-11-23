@@ -120,7 +120,8 @@ issued, when that system calls it. That data is users' identifiers, names,
 email addresses, account status and access times, the optional fields you
 select, their cohort memberships, enrolments and roles, course and activity
 completions, grades (without feedback), quiz, H5P and SCORM attempts with
-their scores (not the answers), assignment submissions with their status and released grades
+their scores and, if the reader asks, each quiz question's mark (not the
+answers), assignment submissions with their status and released grades
 (not what was submitted, nor the feedback), and their entries in the standard
 log (without the event details, IP addresses or "log in as" users; anonymous
 events are sent without their users). The plugin's privacy metadata lists

@@ -78,7 +78,9 @@ Functions that return rows of one kind (the "state functions", such as
   (users with several custom profile fields are the largest). The default is
   the maximum, so most readers need not pass `limit`.
 - A `limit` above the maximum, or more `ids` than the maximum, is refused with
-  `limit_exceeded`. A `limit` below 1 or a negative `after` is refused with
+  `limit_exceeded`. Functions that can return each row's detail
+  (`includedetail`) hold fewer rows per page when asked for it; see each
+  function. A `limit` below 1 or a negative `after` is refused with
   Moodle's `invalidparameter`.
 - Some state functions also take a **filter**, a list of ids that narrows the
   rows paged by `after` and `limit`: `courseids` (rows in those courses),
@@ -262,7 +264,7 @@ Entities:
 | `h5pactivity_attempt` | `h5pactivity_attempts.id` | |
 | `scorm_attempt` | `scorm_attempt.id` | |
 | `scorm_tracking` | `course_modules.id` | A SCORM package's attempts. There is no `delete`; an `upsert` means: refetch the package's attempts. |
-| `quiz_grading` | `course_modules.id` | A quiz's marks and maximum grade. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
+| `quiz_grading` | `course_modules.id` | What every attempt at a quiz shows: its marks, maximum grade, sections and questions' names. There is no `delete`; an `upsert` means: refetch the quiz's attempts. |
 | `assign_submission` | `assign_submission.id` | |
 | `assign_grading` | `course_modules.id` | An assignment's submissions and grades. There is no `delete`; an `upsert` means: refetch the assignment's submissions. |
 
@@ -306,6 +308,8 @@ Which Moodle events record which changes:
 | `\mod_assign\event\identities_revealed` (blind marking ended) | `assign_grading` `upsert`, `entityid` = the assignment's course module, `courseid` = its course. Every grade is released at once, without changes of their own. |
 | `\core\event\course_module_updated`, for an assignment | `assign_grading` `upsert`, as well as the `course_module` `upsert`. Saving an assignment's settings can rescale its grades, change its maximum grade or scale, and turn the marking workflow or anonymous marking on or off, changing every submission's grade without changes of their own. |
 | `\mod_quiz\event\slot_mark_updated` (a question's mark changed), `quiz_grade_updated` (the quiz's maximum grade changed) | `quiz_grading` `upsert`, `entityid` = the quiz's course module, `courseid` = its course. Moodle rewrites every attempt's `sumgrades`, or every attempt's `grade`, without changes of their own. |
+| `\mod_quiz\event\section_break_created`, `section_break_deleted`, `section_title_updated` (a quiz section was added, removed or retitled) | `quiz_grading` `upsert`, as above: it changes the section of attempts' slots. |
+| `\core\event\question_updated` (a question was renamed in the question bank, or its version's status changed) | `quiz_grading` `upsert` for each quiz with attempts at the question (other than previews), as above: the name is on attempts' slots. Editing a question saves a new version, which attempts already made don't use, so it records nothing. |
 | `\core\event\cohort_created`, `cohort_updated` | `cohort` `upsert`. |
 | `\core\event\cohort_deleted` | `cohort` `delete`. |
 | `\core\event\cohort_member_added` | `cohort_member` `upsert`: `entityid` = the cohort, `userid` = the member. |
@@ -373,9 +377,11 @@ without changes of their own; see "Keeping in sync", step 3):
   every grade and its range, or whether grades are released; and in a team
   submission, one member's action changes other members' submissions.
 - A **`quiz_grading` upsert**: the quiz's attempts. Changing a question's mark
-  rewrites every finished attempt's `sumgrades` and `timemodified`, and the
-  quiz's `maxsumgrades`; changing the quiz's maximum grade changes every
-  attempt's `grade` and `grademax`.
+  rewrites every finished attempt's `sumgrades` and `timemodified`, the quiz's
+  `maxsumgrades`, and the slot's `maxmark` in every attempt; changing the
+  quiz's maximum grade changes every attempt's `grade` and `grademax`; and
+  editing the quiz's sections, or renaming a question, changes attempts'
+  `slots`.
 
 **Changes Moodle makes without any event**, which only a full reconciliation
 finds:
@@ -420,9 +426,9 @@ finds:
 - A learner deleting their own SCORM attempts (a capability no role has by
   default) records nothing. So does updating a package so that a SCO is
   removed, which deletes that SCO's values from every attempt.
-- A quiz attempt's `timemodified` changes as the user saves each page of it.
-  Only starting, submitting, grading and the other changes listed above are
-  recorded.
+- A quiz attempt's `timemodified`, and its slots' `state`, change as the user
+  saves each page of it. Only starting, submitting, grading and the other
+  changes listed above are recorded.
 - While a grade item has `needsupdate` set, Moodle has yet to recalculate its
   grades (on Moodle 5.3 and later, a course reset recalculates in the
   background). The recalculation records the grades it changes when it runs.
@@ -854,8 +860,14 @@ attempts at quizzes in the site course, and (on Moodle 5.3 and later) attempts
 Moodle has created in advance that nobody has started (`notstarted`) are never
 returned. A state function (see "Paging"): returns `quizattempts` and `next`.
 
-Parameters: `after`, `limit`, `ids` (quiz attempt ids), as in "Paging", and
-one of two filters: `courseids` or `coursemoduleids`.
+Parameters: `after`, `limit`, `ids` (quiz attempt ids), as in "Paging", one
+of two filters: `courseids` or `coursemoduleids`, and `includedetail`
+(boolean, default false): whether to return each attempt's `slots`. With
+`includedetail`, a page holds at most 100 attempts, whatever `limit` says
+(pass `next` on as usual), and more than 100 `ids` are refused with
+`limit_exceeded`. As a guide: a page of 100 attempts at a 50-question quiz
+took about an eighth of a second and was about 0.9 MB of JSON; time and size
+grow with the number of slots.
 
 Each quiz attempt:
 
@@ -874,6 +886,30 @@ Each quiz attempt:
 | `grade` | float or null | `sumgrades` rescaled to the quiz's grade: `sumgrades / maxsumgrades * grademax`, unrounded. Null when `sumgrades` is null, and when `maxsumgrades` is 0. |
 | `grademax` | float | The quiz's maximum grade. |
 | `passed` | bool or null | Always null: a quiz does not decide passing. Compare `grade` with the quiz's grade item's `gradepass` (see `local_arcs_get_grade_items`). |
+| `slots` | list | Only with `includedetail`: the attempt's slots, in slot order (see below). |
+
+**Slots.** A slot is a numbered position in the quiz, holding one question.
+With random questions, the question in a slot differs from attempt to
+attempt, so a slot is named by the attempt and its number, not by the
+question. Each slot's mark and state are those of the question's latest step
+in the attempt. The question's text, the user's response, the right answer and
+any comment are never returned.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `slot` | int | Slot number, from 1. |
+| `questionid` | int | The question attempted in this slot (Moodle's `question` table). |
+| `questionname` | string or null | The question's name, raw. Null when the question no longer exists. |
+| `sectionfirstslot` | int | The first slot of the quiz section the slot is in. Sections divide a quiz's slots; each starts at a slot and runs to the next. |
+| `sectionheading` | string | The section's heading, raw; may be empty. |
+| `maxmark` | float | The mark the question is out of in this attempt. |
+| `minfraction`, `maxfraction` | float | The lowest and highest fraction of `maxmark` the question can award. `minfraction` is below 0 for questions that take marks away, and `maxfraction` is usually 1. |
+| `fraction` | float or null | The mark awarded, as a fraction of `maxmark`: the mark is `fraction × maxmark`. Null while the question is not graded. |
+| `state` | string | The question's state in Moodle's question engine: `todo`, `invalid` or `complete` while the attempt is open; `gradedright`, `gradedpartial`, `gradedwrong`, `gaveup`, `needsgrading` (to be marked by hand) or `finished` (a question that has no mark, such as a description) once it is finished; or, after a teacher has commented on it or marked it, `manfinished`, `mangaveup`, `mangrright`, `mangrpartial` or `mangrwrong`. Others may be added by Moodle. |
+
+The total of an attempt's slot marks is its `sumgrades`. A slot's question,
+`maxmark` and range can differ between attempts at the same quiz when the
+quiz was changed between them.
 
 The quiz's grade in the gradebook combines the attempts by the quiz's grading
 method (highest, average, first or last attempt); it is the quiz's grade in

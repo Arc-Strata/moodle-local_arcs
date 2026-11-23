@@ -19,6 +19,7 @@ namespace local_arcs\external;
 use core\exception\invalid_parameter_exception;
 use core\exception\moodle_exception;
 use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_arcs\local\source\quiz_attempts;
@@ -28,7 +29,7 @@ use local_arcs\local\source\source;
  * Web service function local_arcs_get_quiz_attempts.
  *
  * It takes two filters, courseids and coursemoduleids, which cannot be combined with
- * each other or with ids.
+ * each other or with ids. With includedetail, each attempt also carries its slots.
  *
  * @package    local_arcs
  * @copyright  2026 Arcs Learning
@@ -44,6 +45,13 @@ class get_quiz_attempts extends state_function {
         return new external_function_parameters(self::paging_parameters() + [
             'courseids' => self::filter_parameter('Return only quiz attempts in these courses'),
             'coursemoduleids' => self::filter_parameter('Return only attempts at these quizzes, by course module id'),
+            'includedetail' => new external_value(
+                PARAM_BOOL,
+                'Whether to return each attempt\'s slots: the question in each, and its mark. Pages then hold at ' .
+                    'most ' . source::DETAIL_MAX_LIMIT . ' attempts',
+                VALUE_DEFAULT,
+                false
+            ),
         ]);
     }
 
@@ -55,6 +63,7 @@ class get_quiz_attempts extends state_function {
      * @param int[] $ids Return only these quiz attempts; after is then ignored.
      * @param int[] $courseids Return only quiz attempts in these courses.
      * @param int[] $coursemoduleids Return only attempts at these quizzes, by course module id.
+     * @param bool $includedetail Whether to return each attempt's slots.
      * @return array
      * @throws moodle_exception module_not_installed, when the quiz module is not installed.
      */
@@ -63,7 +72,8 @@ class get_quiz_attempts extends state_function {
         int $limit = source::DEFAULT_LIMIT,
         array $ids = [],
         array $courseids = [],
-        array $coursemoduleids = []
+        array $coursemoduleids = [],
+        bool $includedetail = false
     ): array {
         global $DB;
 
@@ -73,12 +83,14 @@ class get_quiz_attempts extends state_function {
             'ids' => $ids,
             'courseids' => $courseids,
             'coursemoduleids' => $coursemoduleids,
+            'includedetail' => $includedetail,
         ] = self::validate_parameters(self::execute_parameters(), [
             'after' => $after,
             'limit' => $limit,
             'ids' => $ids,
             'courseids' => $courseids,
             'coursemoduleids' => $coursemoduleids,
+            'includedetail' => $includedetail,
         ]);
         $context = \core\context\system::instance();
         self::validate_context($context);
@@ -89,11 +101,11 @@ class get_quiz_attempts extends state_function {
         }
         $courseids = self::check_filter($ids, $courseids);
         $coursemoduleids = self::check_filter($ids, $coursemoduleids);
-        $source = new quiz_attempts($DB, $courseids, $coursemoduleids);
+        $source = new quiz_attempts($DB, $courseids, $coursemoduleids, $includedetail);
         if (!$source->is_installed()) {
             throw new moodle_exception('module_not_installed', 'local_arcs', '', $source->modname());
         }
-        $page = self::read($source, $after, $limit, $ids);
+        $page = self::read($source, $after, $limit, $ids, $includedetail);
         return ['quizattempts' => $page['rows'], 'next' => $page['next']];
     }
 
@@ -139,6 +151,47 @@ class get_quiz_attempts extends state_function {
                 null,
                 NULL_ALLOWED
             ),
+            'slots' => new external_multiple_structure(
+                self::slot_structure(),
+                'The attempt\'s slots, in slot order; only with includedetail',
+                VALUE_OPTIONAL
+            ),
         ]));
+    }
+
+    /**
+     * Describes one slot of an attempt.
+     *
+     * @return external_single_structure
+     */
+    private static function slot_structure(): external_single_structure {
+        return new external_single_structure([
+            'slot' => new external_value(PARAM_INT, 'Slot number: the question\'s position in the attempt, from 1'),
+            'questionid' => new external_value(PARAM_INT, 'Id of the question attempted in this slot'),
+            'questionname' => new external_value(
+                PARAM_RAW,
+                'The question\'s name, raw; null when the question no longer exists',
+                VALUE_REQUIRED,
+                null,
+                NULL_ALLOWED
+            ),
+            'sectionfirstslot' => new external_value(PARAM_INT, 'First slot of the quiz section the slot is in'),
+            'sectionheading' => new external_value(PARAM_RAW, 'Heading of the quiz section the slot is in, raw; may be empty'),
+            'maxmark' => new external_value(PARAM_FLOAT, 'The mark the question is out of in this attempt'),
+            'minfraction' => new external_value(PARAM_FLOAT, 'The lowest fraction of maxmark the question can award'),
+            'maxfraction' => new external_value(PARAM_FLOAT, 'The highest fraction of maxmark the question can award'),
+            'fraction' => new external_value(
+                PARAM_FLOAT,
+                'The mark awarded, as a fraction of maxmark; null while not graded',
+                VALUE_REQUIRED,
+                null,
+                NULL_ALLOWED
+            ),
+            'state' => new external_value(
+                PARAM_ALPHA,
+                'The question\'s state, such as todo, complete, gradedright, gradedpartial, gradedwrong, gaveup, ' .
+                    'needsgrading or mangrright'
+            ),
+        ]);
     }
 }

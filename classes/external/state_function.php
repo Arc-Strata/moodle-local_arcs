@@ -96,16 +96,21 @@ abstract class state_function extends external_api {
      * @param int $after Cursor.
      * @param int $limit Most rows, or ids.
      * @param int[] $ids Ids to return; empty to page by cursor.
+     * @param bool $detail Whether the rows carry their detail: pages then hold at most DETAIL_MAX_LIMIT rows,
+     *     whatever limit says, and at most that many ids may be given.
      * @return array With 'rows' and 'next'.
      * @throws invalid_parameter_exception When after is negative or limit is below 1.
      * @throws moodle_exception limit_exceeded, when limit is above the maximum or there are more ids than limit.
      */
-    protected static function read(source $source, int $after, int $limit, array $ids): array {
+    protected static function read(source $source, int $after, int $limit, array $ids, bool $detail = false): array {
         if ($after < 0 || $limit < 1) {
             throw new invalid_parameter_exception('after must be 0 or more, and limit 1 or more');
         }
         if ($limit > source::MAX_LIMIT) {
             throw new moodle_exception('limit_exceeded', 'local_arcs', '', source::MAX_LIMIT);
+        }
+        if ($detail) {
+            $limit = min($limit, source::DETAIL_MAX_LIMIT);
         }
         if (!$ids) {
             return $source->page($after, $limit);

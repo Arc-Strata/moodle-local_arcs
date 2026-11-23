@@ -3,6 +3,16 @@
 Releases of `local_arcs`. Breaking changes to the web service contract bump the
 contract version and are listed here.
 
+## 1.1.0 (unreleased)
+
+Additions to contract version 1; nothing changes meaning.
+
+- `local_arcs_get_quiz_attempts` takes an optional `includedetail` parameter. With it, each
+  attempt carries its `slots`: the question in each slot, the quiz section it is in, and its
+  mark and state. Pages with detail hold at most 100 attempts.
+- A `quiz_grading` change is also recorded when a quiz's sections are edited, and, for each
+  quiz with attempts at it, when a question is renamed in the question bank.
+
 ## 1.0.1 (2026-11-12)
 
 Documentation and testing only; no change to the code or the contract.

@@ -383,11 +383,13 @@ class observer {
     }
 
     /**
-     * A quiz's question marks or maximum grade changed. Moodle rewrites every attempt's marks or
-     * grade without attempt events, so readers refetch the quiz's attempts; the change is named by
-     * the quiz's course module.
+     * Something every attempt at a quiz shows changed: a question's mark or the quiz's maximum
+     * grade, which Moodle rewrites in every attempt without attempt events, or a section's heading
+     * or first slot. Readers refetch the quiz's attempts; the change is named by the quiz's course
+     * module.
      *
-     * @param \core\event\base $event \mod_quiz\event\slot_mark_updated or \mod_quiz\event\quiz_grade_updated.
+     * @param \core\event\base $event \mod_quiz\event\slot_mark_updated, quiz_grade_updated,
+     *     section_title_updated, section_break_created or section_break_deleted.
      */
     public static function quiz_grading_changed(\core\event\base $event): void {
         if ($event->courseid == SITEID) {
@@ -400,6 +402,35 @@ class observer {
             null,
             $event->courseid
         );
+    }
+
+    /**
+     * A question was renamed in place, or its version's status changed. Unlike an edit, which saves
+     * a new version, this changes the question that existing attempts name, so every quiz with
+     * attempts at it (other than previews, and quizzes on the site course) records a quiz_grading
+     * upsert. Nothing, when the quiz module has been uninstalled.
+     *
+     * @param \core\event\question_updated $event The event.
+     */
+    public static function question_updated(\core\event\question_updated $event): void {
+        global $DB;
+        if (!$DB->record_exists('modules', ['name' => 'quiz'])) {
+            return;
+        }
+        $sql = "SELECT DISTINCT cm.id, cm.course
+                  FROM {question_attempts} qa
+                  JOIN {quiz_attempts} quiza ON quiza.uniqueid = qa.questionusageid
+                  JOIN {course_modules} cm ON cm.instance = quiza.quiz
+                  JOIN {modules} m ON m.id = cm.module
+                 WHERE qa.questionid = :questionid
+                   AND quiza.preview = 0
+                   AND m.name = :modname
+                   AND cm.course <> :siteid";
+        $params = ['questionid' => $event->objectid, 'modname' => 'quiz', 'siteid' => SITEID];
+        $recorder = self::recorder();
+        foreach ($DB->get_records_sql($sql, $params) as $cm) {
+            $recorder->record(entity::QUIZ_GRADING, (int) $cm->id, operation::UPSERT, null, (int) $cm->course);
+        }
     }
 
     /**
