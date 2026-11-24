@@ -3,7 +3,7 @@
 Releases of `local_arcs`. Breaking changes to the web service contract bump the
 contract version and are listed here.
 
-## 1.1.0 (unreleased)
+## 1.1.0 (2026-11-24)
 
 Additions to contract version 1; nothing changes meaning.
 

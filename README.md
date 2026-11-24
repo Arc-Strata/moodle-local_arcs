@@ -11,11 +11,11 @@ any other system.
 The plugin exposes users and their profile fields, cohorts, course categories,
 courses, course modules, enrolments, course and activity completions, grade
 items, grades, quiz, H5P and SCORM attempts, assignment submissions with
-their rubrics and marking guides, and the standard log, in Moodle's own terms. A change log tells a reader which records
-changed since its last pull, so it can keep its copy in sync without reading
-everything again.
+their rubrics and marking guides, and the standard log, in Moodle's own terms.
+A change log tells a reader which records changed since its last pull, so it
+can keep its copy in sync without reading everything again.
 
-**Status:** 1.0.1, stable.
+**Status:** 1.1.0, stable.
 
 ## Who can use it
 
